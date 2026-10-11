@@ -13,13 +13,14 @@ import {
   DEFAULT_JAILBREAK_PROMPT,
   DEFAULT_NAI_V5_SPEC,
   DEFAULT_NAI_V5_THINKING,
-  DEFAULT_PREFILL_PROMPT,
+  IMAGE_DISPLAY_SIZES,
   newChannel,
   sanitizeTagName,
   settings,
   type ApiChannel,
   type AutoTagPrompts,
   type BackendId,
+  type ImageDisplaySize,
 } from '@/state/settings';
 import { getContext } from '@/st/context';
 import {
@@ -77,6 +78,22 @@ const backendSel = computed<string>({
   get: () => settings.defaultBackend,
   set: v => (settings.defaultBackend = v as BackendId),
 });
+const imageDisplaySel = computed<string>({
+  get: () => settings.ui.imageDisplaySize,
+  set: v => (settings.ui.imageDisplaySize = v as ImageDisplaySize),
+});
+const IMAGE_DISPLAY_OPTIONS = IMAGE_DISPLAY_SIZES.map(o => ({ value: o.value, label: o.label }));
+
+// 副 API「生成 tag 使用」:空串 = 跟随主 API,其余为渠道 id。
+// 渠道增删改名要实时反映到选项里,故用 computed 而非静态常量。
+const tagGenSel = computed<string>({
+  get: () => settings.assignments.tagGen,
+  set: v => (settings.assignments.tagGen = v),
+});
+const TAG_GEN_OPTIONS = computed(() => [
+  { value: '', label: '跟随主 API' },
+  ...settings.channels.map(c => ({ value: c.id, label: c.name || '未命名渠道' })),
+]);
 
 /* —— 渠道:列表只读展示,编辑/新建都在弹窗里进行,避免一长列表平铺误触。
    渠道列表与柏宝书共享(见 state/settings.ts 的共享存储),任一端改动自动同步。 —— */
@@ -122,6 +139,15 @@ interface TagPromptMeta {
 // ⚠ NAI 只列一对,存的是 naiV5Spec / naiV5Thinking(键名带 V5 是历史包袱,见 settings.ts)。
 // 4.5 以下那套单串 tag 的 naiSpec / naiThinking 已随模型列表收窄一起下线,不再列出:
 // 可选模型只剩 4.5/V5,那两份永远走不到,列出来只会让人以为还有第二种口径要维护。
+//
+// 自然语言条件段(autoTag/prompt.ts 的 expandNlSections)对两个后端的规范与思维链都展开,
+// 故这四份都挂上这组宏;内置的 NAI 两份正是靠它一份文本兼顾「生成自然语言」开关两侧。
+const NL_SECTION_MACROS = [
+  { token: '{{#nl}}', desc: '条件段开头：到 {{/nl}} 为止的内容只在开启「生成自然语言」时保留。' },
+  { token: '{{^nl}}', desc: '条件段开头：到 {{/nl}} 为止的内容只在关闭「生成自然语言」时保留。' },
+  { token: '{{/nl}}', desc: '条件段结尾，与 {{#nl}} 或 {{^nl}} 配对使用；不支持嵌套。' },
+];
+
 const TAG_PROMPT_METAS: TagPromptMeta[] = [
   {
     key: 'jailbreak',
@@ -133,42 +159,36 @@ const TAG_PROMPT_METAS: TagPromptMeta[] = [
   {
     key: 'naiV5Spec',
     label: 'NAI \u89c4\u8303',
-    hint: '\u9ed8\u8ba4\u540e\u7aef\u4e3a NAI \u65f6\u62fc\u8fdb\u81ea\u52a8 tag \u8bf7\u6c42\uff0c\u5b9a\u4e49 Base Prompt\u3001\u539f\u751f Character Prompts \u4e0e\u82f1\u6587\u81ea\u7136\u8bed\u8a00\uff08nl \u4e00\u5f8b\u5199\u82f1\u6587\uff09\u30024.5 \u4e0e V5 \u5171\u7528\u8fd9\u4e00\u4efd\uff1achar_captions \u672c\u5c31\u662f v4 \u65f6\u4ee3\u7684\u534f\u8bae\uff0c\u4e24\u4ee3\u5199\u6cd5\u53e3\u5f84\u76f8\u540c\u3002\u7559\u7a7a\u7528\u5185\u7f6e\u9ed8\u8ba4\u3002',
+    hint: '\u9ed8\u8ba4\u540e\u7aef\u4e3a NAI \u65f6\u62fc\u8fdb\u81ea\u52a8 tag \u8bf7\u6c42\uff0c\u5b9a\u4e49 Base Prompt\u3001\u539f\u751f Character Prompts \u4e0e\u82f1\u6587\u81ea\u7136\u8bed\u8a00\uff08nl \u4e00\u5f8b\u5199\u82f1\u6587\uff09\u30024.5 \u4e0e V5 \u5171\u7528\u8fd9\u4e00\u4efd\uff1achar_captions \u672c\u5c31\u662f v4 \u65f6\u4ee3\u7684\u534f\u8bae\uff0c\u4e24\u4ee3\u5199\u6cd5\u53e3\u5f84\u76f8\u540c\u3002{{#nl}}\u2026{{/nl}} \u4e4b\u95f4\u7684\u5185\u5bb9\u53ea\u5728 NAI \u9762\u677f\u5f00\u542f\u300c\u751f\u6210\u81ea\u7136\u8bed\u8a00\u300d\u65f6\u4fdd\u7559\uff0c{{^nl}}\u2026{{/nl}} \u4e4b\u95f4\u7684\u53ea\u5728\u5173\u95ed\u65f6\u4fdd\u7559\u3002\u7559\u7a7a\u7528\u5185\u7f6e\u9ed8\u8ba4\u3002',
     builtin: DEFAULT_NAI_V5_SPEC,
-    macros: [],
+    macros: NL_SECTION_MACROS,
   },
   {
     key: 'naiV5Thinking',
     label: 'NAI 思维链',
-    hint: '默认后端为 NAI 时使用的输出前思考清单，作为 system 压在任务消息之后（解析时会自动剥掉思考块）。槽位块是「Base 块 + 每角色一块」，对应 characters[] 协议，与 ComfyUI 那份的单串形态不通用。与「NAI 规范」配套。留空用内置默认。',
+    hint: '默认后端为 NAI 时使用的输出前思考清单，作为 system 压在任务消息之后（解析时会自动剥掉思考块）。槽位块是「Base 块 + 每角色一块」，对应 characters[] 协议，与 ComfyUI 那份的单串形态不通用。与「NAI 规范」配套，同样按 {{#nl}}…{{/nl}} / {{^nl}}…{{/nl}} 条件段取舍。留空用内置默认。',
     builtin: DEFAULT_NAI_V5_THINKING,
-    macros: [],
+    macros: NL_SECTION_MACROS,
   },
   {
     key: 'comfySpec',
     label: 'ComfyUI 规范',
-    hint: '默认后端为 ComfyUI 时拼进自动 tag 请求，约束 tag / nl 的书写规范。留空用内置默认。',
+    hint: '默认后端为 ComfyUI 时拼进自动 tag 请求，约束 tag / nl 的书写规范。也可用 {{#nl}}…{{/nl}} / {{^nl}}…{{/nl}} 条件段，按当前工作流的「生成自然语言」开关取舍。留空用内置默认。',
     builtin: DEFAULT_COMFY_SPEC,
     macros: [
       {
         token: '{{nl}}',
         desc: '自然语言规范；ComfyUI 面板开启「生成自然语言」时展开，关闭时置空。不写此宏时，开启开关会自动追加到末尾。',
       },
+      ...NL_SECTION_MACROS,
     ],
   },
   {
     key: 'comfyThinking',
     label: 'ComfyUI 思维链',
-    hint: '默认后端为 ComfyUI 时使用的输出前思考清单，作为 system 压在任务消息之后（解析时会自动剥掉思考块）。与「ComfyUI 规范」配套。留空用内置默认。',
+    hint: '默认后端为 ComfyUI 时使用的输出前思考清单，作为 system 压在任务消息之后（解析时会自动剥掉思考块）。与「ComfyUI 规范」配套，同样支持 {{#nl}}…{{/nl}} / {{^nl}}…{{/nl}} 条件段。留空用内置默认。',
     builtin: DEFAULT_COMFY_THINKING,
-    macros: [],
-  },
-  {
-    key: 'prefill',
-    label: '预填充',
-    hint: 'assistant 预填充，以 <thinking> 开头引导模型从思维链续写；随渠道「发送预填充」开关生效。留空用内置默认。全后端通用。',
-    builtin: DEFAULT_PREFILL_PROMPT,
-    macros: [],
+    macros: NL_SECTION_MACROS,
   },
 ];
 
@@ -567,6 +587,15 @@ async function confirmUpdate() {
           开启后图片默认收成一条细条,点击才展开,适合在外面玩时防窥。在卡片上手动展开/折叠过的以手动状态为准(刷新页面后重置)。
         </p>
 
+        <div class="bbi-select-row">
+          <span class="bbi-field-label">楼层图片显示大小</span>
+          <BbiSelect v-model="imageDisplaySel" :options="IMAGE_DISPLAY_OPTIONS" aria-label="楼层图片显示大小" />
+        </div>
+        <p class="bbi-field-hint">
+          只管图片在聊天里显示多大,主要针对电脑宽屏;不改出图分辨率与横竖,也不改图片文件本身。
+          手机等窄屏本来就由宽度限住,基本不受影响。「铺满楼层宽度」即旧版效果。
+        </p>
+
         <label class="bbi-switch-row">
           <span class="bbi-field-label">移动端点当前页导航关窗</span>
           <input v-model="ui.navTapClose" type="checkbox" class="bbi-checkbox" />
@@ -623,13 +652,10 @@ async function confirmUpdate() {
       <Collapsible title="副 API" :open="false">
         <!-- 任务指派:只有一个任务——生成 tag -->
         <div class="bbi-field bbi-assign">
-          <label class="bbi-assign-row">
+          <div class="bbi-assign-row">
             <span class="bbi-field-label">生成 tag 使用</span>
-            <select v-model="settings.assignments.tagGen" class="bbi-input bbi-select">
-              <option value="">跟随主 API</option>
-              <option v-for="c in settings.channels" :key="c.id" :value="c.id">{{ c.name }}</option>
-            </select>
-          </label>
+            <BbiSelect v-model="tagGenSel" :options="TAG_GEN_OPTIONS" aria-label="生成 tag 使用的 API 渠道" />
+          </div>
         </div>
         <p class="bbi-field-hint">不指派渠道时跟随主 API:直接借用你主界面当前正在用的 API(聊天补全/文本补全)来生成画图 tag,无需额外配置。想用不同模型再在下方建副渠道指派。渠道列表与柏宝书共享,任一端改动都会自动同步到另一端。</p>
 
@@ -1021,11 +1047,6 @@ async function confirmUpdate() {
           <span class="bbi-modal-label">流式传输</span>
           <input v-model="editingChannel.stream" type="checkbox" class="bbi-checkbox" />
         </label>
-        <label class="bbi-switch-row">
-          <span class="bbi-modal-label">发送预填充</span>
-          <input v-model="editingChannel.prefill" type="checkbox" class="bbi-checkbox" />
-        </label>
-        <span class="bbi-field-hint">默认开。若副 API 报错信息里出现 prefill 字样,关掉它即可。</span>
         <label class="bbi-modal-field">
           <span class="bbi-modal-label">排除参数</span>
           <input
@@ -1084,7 +1105,8 @@ async function confirmUpdate() {
 
         <p class="bbi-modal-label">{{ editingTagPrompt.hint }}</p>
 
-        <!-- 可用宏:点一下插入到光标处(仅 ComfyUI 规范有 {{nl}};无宏的条目不显示这一栏) -->
+        <!-- 可用宏:点一下插入到光标处(规范与思维链四份都有自然语言条件段,ComfyUI 规范另有 {{nl}};
+             无宏的条目不显示这一栏) -->
         <div v-if="editingTagPrompt.macros.length" class="bbi-macro-bar">
           <span class="bbi-macro-tip">点击插入宏:</span>
           <button
@@ -1250,9 +1272,13 @@ async function confirmUpdate() {
   justify-content: space-between;
   gap: 12px;
 }
-/* 指派下拉:比全局 bbi-select 更窄小一号,与右侧对齐、不撑满半行(柏宝书同款) */
-.bbi-assign-row .bbi-select {
+/* 指派下拉:比全局 BbiSelect 更窄小一号,与右侧对齐、不撑满半行(柏宝书同款)。
+   BbiSelect 自带 180px 固定宽,这里收窄并放开 max-width 以适应移动端。 */
+.bbi-assign-row :deep(.bbi-select-box) {
+  width: 160px;
   max-width: 60%;
+}
+.bbi-assign-row :deep(.bbi-select-trigger) {
   font-size: 12px;
 }
 
