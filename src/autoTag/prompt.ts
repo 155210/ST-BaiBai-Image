@@ -2,6 +2,7 @@ import type { ChatMsg } from '@/api/client';
 import { templateSupportsNegative } from '@/backends/comfyTemplates';
 import { getWorkflowPlaceholders } from '@/backends/comfyui';
 import { naiSupportsCharacterPrompts } from '@/backends/nai';
+import type { Orientation } from '@/backends/size';
 import {
   cleanHistoryText,
   prepareTargetText,
@@ -20,6 +21,7 @@ import { isAiStoryMessage, isStoryMessage, type STContext } from '@/st/context';
 import type { AutoTagSettings } from '@/state/settings';
 import {
   activeComfyPreset,
+  activeOrientationLock,
   DEFAULT_COMFY_NL_SPEC,
   DEFAULT_COMFY_SPEC,
   DEFAULT_COMFY_THINKING,
@@ -28,20 +30,62 @@ import {
   DEFAULT_NAI_THINKING,
   DEFAULT_NAI_V5_SPEC,
   DEFAULT_NAI_V5_THINKING,
-  DEFAULT_PREFILL_PROMPT,
   settings,
 } from '@/state/settings';
+
+/**
+ * 本次自动 tag 的协议形态。按默认后端与其开关算**一次**,写协议(本模块)与验收/收尾
+ * (runner.ts)共用同一份——两边各算各的迟早会漂:协议说只写 tag,验收却还在要 nl。
+ */
+export interface AutoTagProfile {
+  /** NAI 4.5/V5:Base + 原生 Character Prompts(characters[])。 */
+  naiCharPrompts: boolean;
+  /**
+   * 协议含 nl:ComfyUI 当前工作流开了「生成自然语言」,或 NAI 4.5/V5 开了「生成自然语言」。
+   * 两个开关同一口径,只管 AI 写不写;已写进 tag 的 nl 照常发送。
+   */
+  nl: boolean;
+  /** 渠道锁定的画幅方向;null = 由 AI 按后端规范的判据自选。 */
+  lockedSize: Orientation | null;
+}
+
+export function autoTagProfile(): AutoTagProfile {
+  const backend = settings.defaultBackend;
+  const naiCharPrompts = backend === 'nai' && naiSupportsCharacterPrompts(settings.nai.model);
+  // 两项都取自同一个当前预设 / 渠道:切工作流即同时切走自然语言与画幅锁的口径
+  const nl =
+    backend === 'comfyui'
+      ? activeComfyPreset().naturalLanguage
+      : naiCharPrompts && settings.nai.naturalLanguage;
+  const lock = activeOrientationLock();
+  return { naiCharPrompts, nl, lockedSize: lock === 'auto' ? null : lock };
+}
+
+/**
+ * 展开自然语言条件段:{{#nl}}…{{/nl}} 只在开启自然语言时保留,{{^nl}}…{{/nl}} 只在关闭时保留
+ * (写法借 Mustache 的段落语法,与 ComfyUI 规范里整段替换的 {{nl}} 宏互不相干)。
+ *
+ * 用在规范与思维链上,让一份文本在开关两侧各自自洽,而不必维护两份会漂的副本。
+ * 不支持嵌套;配不上对的标记原样留着——写错了在请求历史里看得见,比静默吞掉好查。
+ * 这两类文本都不经 ST 宏替换(substituteParams),标记不会被宿主吃掉。
+ */
+export function expandNlSections(text: string, nlOn: boolean): string {
+  return text.replace(/\{\{([#^])nl\}\}([\s\S]*?)\{\{\/nl\}\}/g, (_match, kind: string, body: string) =>
+    (kind === '#') === nlOn ? body : '',
+  );
+}
 
 /**
  * 按默认后端取 tag 书写规范:
  * - comfyui → comfySpec(留空回落内置默认);{{nl}} 宏按自然语言开关展开/置空,
  *   自定义内容不含宏时开启开关会把自然语言规范追加在末尾(防止开关静默失效)。
- * - nai → naiSpec(留空回落内置默认 DEFAULT_NAI_SPEC)。
+ * - nai → 4.5/V5 取 naiV5Spec、其余模型取 naiSpec(留空各自回落内置默认)。
  * - webui → 暂不附加。
+ * 两个后端都先展开自然语言条件段(expandNlSections)。
  */
 function backendPromptSpec(options: AutoTagSettings, nlOn: boolean, naiCharPromptsOn: boolean): string {
   if (settings.defaultBackend === 'comfyui') {
-    const template = (options.prompts?.comfySpec ?? '').trim() || DEFAULT_COMFY_SPEC;
+    const template = expandNlSections((options.prompts?.comfySpec ?? '').trim() || DEFAULT_COMFY_SPEC, nlOn);
     const nlSpec = nlOn ? DEFAULT_COMFY_NL_SPEC : '';
     const resolved = template.includes('{{nl}}')
       ? template.replaceAll('{{nl}}', nlSpec)
@@ -52,9 +96,10 @@ function backendPromptSpec(options: AutoTagSettings, nlOn: boolean, naiCharPromp
     return resolved.replace(/\n{3,}/g, '\n\n').trim();
   }
   if (settings.defaultBackend === 'nai') {
-    return naiCharPromptsOn
+    const template = naiCharPromptsOn
       ? (options.prompts?.naiV5Spec ?? '').trim() || DEFAULT_NAI_V5_SPEC
       : (options.prompts?.naiSpec ?? '').trim() || DEFAULT_NAI_SPEC;
+    return expandNlSections(template, nlOn);
   }
   return '';
 }
@@ -67,13 +112,14 @@ function backendPromptSpec(options: AutoTagSettings, nlOn: boolean, naiCharPromp
  * 邻接绑定——共用一份 ComfyUI 口径的思维链会让它被要求填规范从未教过的东西。
  * webui 暂无专属规范,回落 comfy 那份(该后端尚未接入)。
  */
-function backendThinkingPrompt(options: AutoTagSettings, naiCharPromptsOn: boolean): string {
+function backendThinkingPrompt(options: AutoTagSettings, nlOn: boolean, naiCharPromptsOn: boolean): string {
   if (settings.defaultBackend === 'nai') {
-    return naiCharPromptsOn
+    const template = naiCharPromptsOn
       ? (options.prompts?.naiV5Thinking ?? '').trim() || DEFAULT_NAI_V5_THINKING
       : (options.prompts?.naiThinking ?? '').trim() || DEFAULT_NAI_THINKING;
+    return expandNlSections(template, nlOn);
   }
-  return (options.prompts?.comfyThinking ?? '').trim() || DEFAULT_COMFY_THINKING;
+  return expandNlSections((options.prompts?.comfyThinking ?? '').trim() || DEFAULT_COMFY_THINKING, nlOn);
 }
 
 function recentFloors(context: STContext, targetFloor: number, count: number): number[] {
@@ -112,6 +158,8 @@ export async function buildAutoTagMessages(
    * 空串/缺省时不占消息位;放在角色参考与上下文之后、目标正文之前。
    */
   taskNote?: string,
+  /** 协议形态;runner 开跑时快照一份传进来,验收与收尾用同一份(缺省即时现算)。 */
+  profile: AutoTagProfile = autoTagProfile(),
 ): Promise<ChatMsg[]> {
   const target = context.chat[targetFloor];
   const preparedTarget =
@@ -138,14 +186,13 @@ export async function buildAutoTagMessages(
     Promise.resolve(fetchUserPersona(context)),
   ]);
 
-  // 自然语言模式:默认后端为 ComfyUI 且当前工作流开启「生成自然语言」。
+  // 自然语言模式(profile.nl):ComfyUI 当前工作流或 NAI 渠道开启了「生成自然语言」。
   // 开启后协议变为 tag/nl 两键——自然语言是配合短 tag 用的,不是替代。
-  // 两项都取自同一个当前预设:切工作流即同时切走自然语言与动态负面词的口径。
+  // 动态负面词同样取自当前预设:切工作流即同时切走自然语言与动态负面词的口径。
   const comfyOn = settings.defaultBackend === 'comfyui';
-  const naiCharPromptsOn =
-    settings.defaultBackend === 'nai' && naiSupportsCharacterPrompts(settings.nai.model);
+  const naiCharPromptsOn = profile.naiCharPrompts;
   const comfyPreset = comfyOn ? activeComfyPreset() : null;
-  const nlOn = !!comfyPreset?.naturalLanguage || naiCharPromptsOn;
+  const nlOn = profile.nl;
   // 动态负面词门槛:custom 模式看工作流是否含 %negative_prompt%;
   // simple 模式由模板决定(Flux 无真实负面输入,请求了也没地方写)。
   let negativeOn = false;
@@ -168,28 +215,34 @@ export async function buildAutoTagMessages(
   const sampleNl = library
     ? 'A girl with long silver hair and red eyes wearing a white dress'
     : 'A girl with short black hair wearing a white dress';
+  // NAI 关掉自然语言时示例里一个 nl 键都不留:模型照抄示例的倾向比照读规则强得多
   const sampleImage: Record<string, unknown> = naiCharPromptsOn
     ? {
         position: 'P2',
         tag: '1girl, classroom, sunset, medium shot',
-        nl: 'A girl stands in a classroom with sunset light coming in.',
+        ...(nlOn ? { nl: 'A girl stands in a classroom with sunset light coming in.' } : {}),
         characters: [
           {
             name: '小雪',
             tag: library
               ? 'girl, long silver hair, red eyes, white dress, waving'
               : 'girl, short black hair, blue eyes, white dress, waving',
-            nl: 'The girl waves on the left side of the frame.',
+            ...(nlOn ? { nl: 'The girl waves on the left side of the frame.' } : {}),
           },
         ],
       }
     : { position: 'P2', tag: sampleTag };
   if (nlOn && !naiCharPromptsOn) sampleImage.nl = sampleNl;
   if (negativeOn) sampleImage.negative = 'extra people, duplicate character';
-  sampleImage.size = 'portrait';
+  sampleImage.size = profile.lockedSize ?? 'portrait';
   const outputShape = JSON.stringify({ images: [sampleImage], changes: [] });
+  // NAI 两种写法共用的尾段:角色块的取舍与 Base / 角色的分工不随自然语言开关变
+  const naiCharacterRuleTail =
+    'This includes visible characters who have no library profile: a one-off unnamed individual gets a Character Prompt too, keyed by the term the story uses for them. Anonymous crowds visible in the frame remain in Base. Character tag uses girl/boy without a numeric count and contains that character appearance, outfit, and action. Do not include quality tags, negative tags, or XML.';
   const contentRule = naiCharPromptsOn
-    ? '4. Every image must include Base tag, English Base nl, and characters. Write every nl in English even when the story text is in another language, but keep every character name exactly as in the story: Chinese names stay Chinese (小雪, never Xiaoxue or Snow) in characters[].name, changes[].name, and inside any tag/nl text. Base contains only global counts, scene, composition, lighting, and shared relations — this applies to the Base nl as much as to the Base tag. Give each individual character visible inside the selected frame one Character Prompt ordered left-to-right then top-to-bottom; name/tag/nl are all required. This includes visible characters who have no library profile: a one-off unnamed individual gets a Character Prompt too, keyed by the term the story uses for them. Anonymous crowds visible in the frame remain in Base. Character tag uses girl/boy without a numeric count and contains that character appearance, outfit, and action. Do not include quality tags, negative tags, or XML.'
+    ? nlOn
+      ? `4. Every image must include Base tag, English Base nl, and characters. Write every nl in English even when the story text is in another language, but keep every character name exactly as in the story: Chinese names stay Chinese (小雪, never Xiaoxue or Snow) in characters[].name, changes[].name, and inside any tag/nl text. Base contains only global counts, scene, composition, lighting, and shared relations — this applies to the Base nl as much as to the Base tag. Give each individual character visible inside the selected frame one Character Prompt ordered left-to-right then top-to-bottom; name/tag/nl are all required. ${naiCharacterRuleTail}`
+      : `4. Every image must include Base tag and characters. This output is tag-only: write no nl key anywhere, neither in Base nor in characters[]. Keep every character name exactly as in the story: Chinese names stay Chinese (小雪, never Xiaoxue or Snow) in characters[].name, changes[].name, and inside any tag text. Base contains only global counts, scene, composition, lighting, and shared relations. Give each individual character visible inside the selected frame one Character Prompt ordered left-to-right then top-to-bottom; name and tag are both required. ${naiCharacterRuleTail}`
     : nlOn
     ? '4. tag 与 nl 是同一画面的两种写法：tag 是 danbooru 短 tag，nl 是连贯的自然语言；二者都只含正面内容，不得包含质量词、负面词、JSON 以外的说明或 <bbi_image>/<tag>/<nl>/<size> 标签。'
     : '4. tag 只能是该画面的正面内容提示词；不得包含质量词、负面词、JSON 以外的说明或 <bbi_image> 标签。';
@@ -207,14 +260,24 @@ export async function buildAutoTagMessages(
       : `2. images 数量必须在 ${minImages}～${maxImages} 之间。下限 ${minImages} 是用户明确要求：即使最强候选不足，也必须从目标正文中较次但仍可见的单一瞬间补足，不得返回少于 ${minImages} 张或空数组。达到下限后不要为了接近上限而凑数。`;
 
   // 画幅方向的判定口径写在后端规范的「画幅方向」段;这里只声明键的合法值,不重复规则。
-  const sizeRule = `5. size 是画幅方向，只能填 "portrait"（竖构图）或 "landscape"（横构图），判定口径见后端规范；拿不准就填 "portrait"。`;
+  // 渠道锁了方向时改口:方向已定,规范里那段选向判据本次不适用,取景要反过来贴合画幅——
+  // 只锁出图不改协议的话,模型照样为群像构思宽画面,出图却是竖的,人被挤成一排小人。
+  const sizeRule =
+    profile.lockedSize === 'portrait'
+      ? '5. size 已由用户在渠道设置里锁定为竖图，每张图都填 "portrait"；后端规范里关于横竖怎么选的判据本次不适用。按竖画幅取景：多人或宽阔场景靠纵深、前后景层次或更近的景别容纳主体，不要把人横排成一列挤小。'
+      : profile.lockedSize === 'landscape'
+        ? '5. size 已由用户在渠道设置里锁定为横图，每张图都填 "landscape"；后端规范里关于横竖怎么选的判据本次不适用。按横画幅取景：单人画面照常成立，用环境与留白撑开宽度，不要为了填满画面凭空加人。'
+        : `5. size 是画幅方向，只能填 "portrait"（竖构图）或 "landscape"（横构图），判定口径见后端规范；拿不准就填 "portrait"。`;
 
   const libraryReferenceRule = naiCharPromptsOn
-    ? '- If a visible character exists in the fixed appearance library or is created in this changes array, copy the fixed fields into that character own characters[].tag; keep appearance wording verbatim but convert 1girl/1boy to girl/boy. The fandom identity tag (fields.fandom) goes first, verbatim. Do not put them in Base or assign them to another character. Library natural-language notes may inform that character nl. Use the library entry name verbatim for characters[].name and for any name inside tag/nl — never transliterate, translate, or vary it.'
+    ? `- If a visible character exists in the fixed appearance library or is created in this changes array, copy the fixed fields into that character own characters[].tag; keep appearance wording verbatim but convert 1girl/1boy to girl/boy. The fandom identity tag (fields.fandom) goes first, verbatim. Do not put them in Base or assign them to another character.${nlOn ? ' Library natural-language notes may inform that character nl.' : ''} Use the library entry name verbatim for characters[].name and for any name inside ${nlOn ? 'tag/nl' : 'tag'} — never transliterate, translate, or vary it.`
     : '- 画面中的角色只要已在【角色固定外貌库】，或在本次 changes 中建了档，tag 与 nl 就必须照抄库中/刚建档的字段值，用词一字不改，不得自行改写或增删其固定外貌。fandom 字段只作档案记录，ComfyUI 画图时不照抄它，同人身份 tag 按下发的 ComfyUI 规范现场判定并按规范转义括号。\n   - 同一角色的固定外貌在一张图里只写一遍：同一图内再次提到他时用简短指代（the boy、the silver-haired girl）承接，禁止把整串外貌重复第二遍——重复会让模型以为画面里有多个同样的人，把一个人画成互不相连的几块。';
-  const newCharacterNlRule = naiCharPromptsOn
-    ? '\n   - NAI V5 profile requirement: every field:"new" change must include a non-empty nl containing a concise English natural-language description of the character fixed appearance. The name must be the character exact name from the card/lorebook/story — a Chinese name stays Chinese (小雪), never pinyin or translation. Fandom characters must also include their identity tag in fields.fandom, e.g. {"name":"冬海","field":"new","fields":{"sex":"1girl","hair":"long black hair","eyes":"blue eyes","fandom":"kasumi (blue archive)"},"nl":"A girl with long black hair and blue eyes.","position":"P2","reason":"first appearance"}; original characters omit fandom. If an existing library entry lacks fandom but the character is fandom, report a changes item with field:"fandom". Describe only fixed appearance: no current outfit, pose, or location — temporary states never enter the profile.'
-    : '';
+  // 建档 nl 只在协议含 nl 时要求(runner 的验收同一口径,见 autoTagProfile)
+  const newCharacterNlRule = !naiCharPromptsOn
+    ? ''
+    : nlOn
+      ? '\n   - NAI V5 profile requirement: every field:"new" change must include a non-empty nl containing a concise English natural-language description of the character fixed appearance. The name must be the character exact name from the card/lorebook/story — a Chinese name stays Chinese (小雪), never pinyin or translation. Fandom characters must also include their identity tag in fields.fandom, e.g. {"name":"冬海","field":"new","fields":{"sex":"1girl","hair":"long black hair","eyes":"blue eyes","fandom":"kasumi (blue archive)"},"nl":"A girl with long black hair and blue eyes.","position":"P2","reason":"first appearance"}; original characters omit fandom. If an existing library entry lacks fandom but the character is fandom, report a changes item with field:"fandom". Describe only fixed appearance: no current outfit, pose, or location — temporary states never enter the profile.'
+      : '\n   - NAI profile requirement: the name must be the character exact name from the card/lorebook/story — a Chinese name stays Chinese (小雪), never pinyin or translation. Fandom characters must also include their identity tag in fields.fandom, e.g. {"name":"冬海","field":"new","fields":{"sex":"1girl","hair":"long black hair","eyes":"blue eyes","fandom":"kasumi (blue archive)"},"position":"P2","reason":"first appearance"}; original characters omit fandom. If an existing library entry lacks fandom but the character is fandom, report a changes item with field:"fandom".';
   const newCharacterRule = `
    - **建档先于画图**：先通读目标正文，找出每个有名有姓、且【角色固定外貌库】里还没有的正式角色——只要角色卡、世界书、柏宝书或持续剧情为他给出了设定，或他是持续参与剧情的角色，首次出场就必须建档，不论他是否入选本次图片。判断依据是发给你的全部设定内容，由你自己通读判断。一次性无名路人不建。
    - **建档资格与入画资格是两回事**：不建档只表示他不进角色库，不表示他不能入画；已建档也不表示他必须入画。先按本图的主体和核心互动取景，再为镜头内的人写外貌，不按档案状态决定取舍。无名角色若是核心互动的参与者，照常入画，不得仅因缺档案放弃画面、改选瞬间或裁掉他；仅仅在场不构成入画理由，无关在场者可以留在镜头外。
@@ -229,7 +292,7 @@ export async function buildAutoTagMessages(
     : '- 多人画面中，每个角色的发色、瞳色、体型、服装、物件和个人动作都必须使用该角色的区分性称谓邻接绑定，禁止把两人的外貌特征散放成无法归属的一串公共 tag。';
   const characterRule = `7. 角色状态与 changes：${newCharacterRule}
    ${libraryReferenceRule}
-   - 按正文 P 位置为每个角色维护临时服装状态：正文未明确初始穿着时可以合理决定一次；没有穿上、脱下、换装、衣物损坏或场景/时间跳跃时沿用上一状态，发生明确变化后从对应 P 位置起更新。首次确定一套临时服装时，必须冻结足以复现款式的“服装视觉指纹”：服装类别之外，再固定版型/剪裁、主色和关键部件，涉及裤袜时固定颜色与透明度；例如不能只写 school uniform, pantyhose，而应具体到 navy school blazer, white collared shirt, red ribbon, dark pleated skirt, opaque white pantyhose。只补少量关键特征，不堆无关装饰。相同状态复用同一视觉指纹；镜头外不可见的部件可以省略，但省略不等于脱掉，后续重新可见且中间没有变化时必须恢复。每张图的 tag 与 nl 都要写出当前镜头可见的关键服装特征。临时穿着不得写进固定 outfit，除非设定明确它是长期不换的招牌着装。
+   - 按正文 P 位置为每个角色维护临时服装状态：正文未明确初始穿着时可以合理决定一次；没有穿上、脱下、换装、衣物损坏或场景/时间跳跃时沿用上一状态，发生明确变化后从对应 P 位置起更新。首次确定一套临时服装时，必须冻结足以复现款式的“服装视觉指纹”：服装类别之外，再固定版型/剪裁、主色和关键部件，涉及裤袜时固定颜色与透明度；例如不能只写 school uniform, pantyhose，而应具体到 navy school blazer, white collared shirt, red ribbon, dark pleated skirt, opaque white pantyhose。只补少量关键特征，不堆无关装饰。相同状态复用同一视觉指纹；镜头外不可见的部件可以省略，但省略不等于脱掉，后续重新可见且中间没有变化时必须恢复。每张图的 ${nlOn ? 'tag 与 nl 都' : 'tag 都'}要写出当前镜头可见的关键服装特征。临时穿着不得写进固定 outfit，除非设定明确它是长期不换的招牌着装。
    ${multiCharacterBindingRule}
    - 库中已有角色发生**永久外貌变化**（染发、剪发、留疤、长大、永久变身、固定造型改变等）时，必须通过 changes 报告：{"name":"角色名","field":"hair","value":"short red hair","position":"P4","reason":"在此处染发并剪短"}；field 只能是 sex/hair/eyes/skin/body/extra/outfit/fandom。
    - 已建档角色被判定为同人、但档案里没有 fandom 的，必须补一条 changes：{"name":"角色名","field":"fandom","value":"character name (copyright name)","reason":"判定为同人，补身份 tag"}；档案已有 fandom 的直接照抄，不重复报告。
@@ -268,14 +331,11 @@ ${characterRule}
   messages.push({ role: 'system', content: fixedContract });
   // 思维链:压在任务协议之后,要求模型先在 <thinking> 里过检查点再输出 JSON。
   // 解析端(protocol.ts)会先剥掉 think 块再取 JSON,二者配套;按后端取对应的那一份。
-  const thinking = backendThinkingPrompt(options, naiCharPromptsOn);
+  const thinking = backendThinkingPrompt(options, nlOn, naiCharPromptsOn);
   if (thinking) messages.push({ role: 'system', content: thinking });
   const libraryBlock = library?.trim() || `【角色固定外貌库】[system-maintained; currently empty]\n（当前为空，没有任何角色已建档。世界书、角色卡、柏宝书和正文只提供建档依据；未列在本区块中的正式角色必须通过 field:"new" 建档。）`;
   const taskBlock = taskNote?.trim() ? `${taskNote.trim()}\n\n` : '';
   const userContent = `${memoryText}\n\n${libraryBlock}\n\n${taskBlock}${previous ? `${previous}\n\n` : ''}--- 目标正文｜${roleLabel(context, targetFloor)} ---\n${preparedTarget.promptText}`;
   messages.push({ role: 'user', content: userContent });
-  // 预填充:以 <thinking> 开头,强制模型从思考清单续写;渠道「发送预填充」关闭时由 client 丢弃。
-  const prefill = (options.prompts?.prefill ?? '').trim() || DEFAULT_PREFILL_PROMPT;
-  if (prefill) messages.push({ role: 'assistant', content: prefill });
   return messages;
 }
