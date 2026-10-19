@@ -59,6 +59,7 @@
 | src/floor/PromptEditor.vue | <StreamView v-if="rewriting" /> | 重写时看实时输出 | #8 |
 | src/pages/batch/index.vue | <StreamView /> | 批量页实时输出 | #8 |
 | src/pages/settings/index.vue | 开了之后，正在写 tag 的楼层下面 | 流式说明 | #8 |
+| src/floor/promptEditor.ts | options.regenerate && consumeAutoGenerate( | 图片浏览里 AI 重写完自己出图（楼层不在页面上时没有卡片认领标记） | #15 |
 
 ## 其他本分支改动（不在原作者文件里，或合并时一定会冲突、手动处理）
 

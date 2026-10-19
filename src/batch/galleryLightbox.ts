@@ -2,9 +2,13 @@ import { h, reactive, render } from 'vue';
 
 import { busyLabel, deleteSlotImage, readSlot, regenerateSlot, type GallerySlot, type SlotView } from '@/batch/gallery';
 import { imageDownloadFileName } from '@/floor/download';
+import { cancelFloorTags } from '@/autoTag/runner';
 import { cancelGen, getGenRecord, slotKey } from '@/floor/genState';
+import { isTagPlanning } from '@/floor/tagPlanState';
 import { closeLightbox, openLightbox } from '@/floor/lightbox';
 import type { BbiImageEntry } from '@/floor/storage';
+import { openPromptEditor } from '@/floor/promptEditor';
+import { backendStatus } from '@/generate';
 import { formatGenerationMeta } from '@/generationMeta';
 import type { LightboxNav } from '@/lightboxNav/types';
 import EmptySlotView from '@/pages/batch/EmptySlotView.vue';
@@ -153,10 +157,26 @@ export function openGalleryLightbox(options: GalleryLightboxOptions): void {
     return;
   }
   closeEmpty?.();
+  // 「重新生成中」画面只带切卡片的箭头和标题,别把 roll 箭头、删除、状态轮询带过去
+  const plainNav: LightboxNav = { prev: nav.prev, next: nav.next, label: nav.label };
   // 大图上的「重新生成」:和卡片上的 ↻ 同一条路,出完自动换成新图
   nav.regenerate = () => {
     closeLightbox();
-    openEmpty(options, view, { ...nav, regenerate: undefined }, true);
+    openEmpty(options, view, plainNav, true);
+  };
+  // 大图上的「编辑」:和卡片上的 ✎ 同一个弹窗;「应用并重绘」回到大图看进度,出完换新图
+  nav.edit = () => {
+    closeLightbox();
+    openPromptEditor({
+      at: { chatId: context.getCurrentChatId?.() ?? '', messageId: view.floor, swipeId: view.swipeId, seq: view.seq, rawTag: view.tag },
+      content: { ...view.content, characters: view.content.characters.map(character => ({ ...character })) },
+      historyCount: view.history.length,
+      configured: backendStatus().configured,
+      regenerate: () => {
+        const fresh = readSlot(getContext()?.chat ?? [], slot);
+        if (fresh) openEmpty(options, fresh, plainNav, true);
+      },
+    });
   };
   // 同一张卡片的历史 roll:小箭头在左上角,和切卡片的两侧大箭头分开
   const rolls = view.history.length ? view.history : [entry];
@@ -175,7 +195,7 @@ export function openGalleryLightbox(options: GalleryLightboxOptions): void {
       danger: true,
       action: () => {
         closeLightbox();
-        void deleteSlotImage(view.floor, view.swipeId, entry).then(() =>
+        void deleteSlotImage(view.floor, view.swipeId, entry, { index: at, total: rolls.length }).then(() =>
           openGalleryLightbox({ list, index, onShow: options.onShow }),
         );
       },
@@ -186,6 +206,10 @@ export function openGalleryLightbox(options: GalleryLightboxOptions): void {
   const before = slotImage(view)?.generationId ?? '';
   let waiting = false;
   nav.poll = () => {
+    if (isTagPlanning(key)) {
+      waiting = true;
+      return { text: 'AI 重写提示词中…', cancel: () => cancelFloorTags(view.floor) };
+    }
     const record = getGenRecord(key);
     if (record?.phase === 'queued' || record?.phase === 'generating') {
       waiting = true;

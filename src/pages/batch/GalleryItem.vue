@@ -11,7 +11,9 @@ import {
   type GallerySlot,
 } from '@/batch/gallery';
 import { effectiveOrientation } from '@/backends/size';
+import { cancelFloorTags } from '@/autoTag/runner';
 import { cancelGen, getGenRecord, slotKey } from '@/floor/genState';
+import { isTagPlanning } from '@/floor/tagPlanState';
 import { confirmImageMissing } from '@/floor/missingImages';
 import { openPromptEditor } from '@/floor/promptEditor';
 import type { BbiImageEntry } from '@/floor/storage';
@@ -44,7 +46,11 @@ const key = computed(() =>
   view.value ? slotKey(props.chatId, view.value.floor, view.value.swipeId, view.value.seq) : '',
 );
 const record = computed(() => (key.value ? getGenRecord(key.value) : undefined));
-const busy = computed(() => record.value?.phase === 'queued' || record.value?.phase === 'generating');
+/** AI 重写提示词中(还没开始出图,但这张卡片也不能再动)。 */
+const planning = computed(() => !!key.value && isTagPlanning(key.value));
+const busy = computed(
+  () => planning.value || record.value?.phase === 'queued' || record.value?.phase === 'generating',
+);
 const failed = computed(() => record.value?.phase === 'error');
 
 /** 翻历史的位置:默认最新一张,有新图落盘就跟到最新。 */
@@ -78,7 +84,7 @@ const badge = computed(() => {
   return parts.join(' · ');
 });
 
-const busyText = computed(() => busyLabel(record.value));
+const busyText = computed(() => (planning.value ? 'AI 重写提示词中…' : busyLabel(record.value)));
 
 function openImage(): void {
   const entry = shown.value;
@@ -118,11 +124,13 @@ function removeShown(): void {
   const entry = shown.value;
   if (!current || !entry || busy.value) return;
   menuOpen.value = false;
-  void deleteSlotImage(current.floor, current.swipeId, entry);
+  const total = current.history.length;
+  void deleteSlotImage(current.floor, current.swipeId, entry, { index: Math.min(index.value, total - 1), total });
 }
 
 function cancel(): void {
-  if (key.value) cancelGen(key.value);
+  if (planning.value && view.value) cancelFloorTags(view.value.floor);
+  else if (key.value) cancelGen(key.value);
 }
 
 function onImageError(): void {
