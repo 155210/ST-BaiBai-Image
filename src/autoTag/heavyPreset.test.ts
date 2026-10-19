@@ -49,7 +49,8 @@ const ST_PRESET = {
       injection_order: 50,
     },
     { identifier: 'cont', name: '仅续写', role: 'system', content: '续写', injection_trigger: ['continue'] },
-    { identifier: 'orphan', name: '不在顺序里', role: 'system', content: 'x' },
+    { identifier: 'orphan', name: '不在顺序里', role: 'system', content: 'x', enabled: true },
+    { identifier: 'dialogueExamples', name: 'Chat Examples', system_prompt: true, marker: true },
   ],
   prompt_order: [
     { character_id: 100000, order: [{ identifier: 'main', enabled: true }] },
@@ -70,10 +71,16 @@ const ST_PRESET = {
 };
 
 describe('parseSTPreset', () => {
-  it('按全局 prompt_order 排序,聊天记录换成柏宝绘占位,标记条目不导入', () => {
+  it('列表与酒馆条目列表一致:按全局 prompt_order 排序,聊天记录换成柏宝绘占位,标记条目不导入', () => {
     const { entries, promptCount } = parseSTPreset(ST_PRESET);
-    expect(entries.map(e => e.id)).toEqual(['main', 'abc', HEAVY_SLOT_ID, 'deep', 'cont', 'jailbreak', 'orphan']);
-    expect(promptCount).toBe(6);
+    expect(entries.map(e => e.id)).toEqual(['main', 'abc', HEAVY_SLOT_ID, 'deep', 'cont', 'jailbreak']);
+    expect(promptCount).toBe(5);
+  });
+
+  it('条目库里有、酒馆列表没放的条目收进 extras,一律关闭,标记条目不收', () => {
+    const { entries, extras } = parseSTPreset(ST_PRESET);
+    expect(extras.map(e => [e.id, e.enabled])).toEqual([['orphan', false]]);
+    expect(entries.some(e => e.id === 'orphan')).toBe(false);
   });
 
   it('保留身份、位置、深度与开关', () => {
@@ -83,8 +90,6 @@ describe('parseSTPreset', () => {
     expect(byId.get('jailbreak')?.enabled).toBe(false);
     // 触发器只含续写:普通生成酒馆也不发
     expect(byId.get('cont')?.enabled).toBe(false);
-    // 不在顺序里的条目追加在末尾、默认关闭
-    expect(byId.get('orphan')?.enabled).toBe(false);
   });
 
   it('支持提示词管理器单独导出的格式,无聊天记录标记时占位放末尾', () => {
@@ -100,7 +105,7 @@ describe('parseSTPreset', () => {
 
   it('汇报导入统计,读取压缩系统消息开关', () => {
     const parsed = parseSTPreset({ ...ST_PRESET, squash_system_messages: true });
-    expect(parsed).toMatchObject({ promptCount: 6, enabledCount: 3, droppedMarkers: 2, hadChatHistory: true, squash: true });
+    expect(parsed).toMatchObject({ promptCount: 5, enabledCount: 3, droppedMarkers: 2, hadChatHistory: true, squash: true });
     expect(parseSTPreset(ST_PRESET).squash).toBe(false);
   });
 
@@ -240,6 +245,26 @@ describe('assembleHeavyMessages', () => {
 });
 
 describe('normalizeHeavyPreset / heavyPresetUsable', () => {
+  it('extras 一律关闭、不收占位,与列表合起来 id 去重;老数据没有 extras 时为空', () => {
+    const preset = normalizeHeavyPreset({
+      entries: [{ id: 'a', content: 'a' }],
+      extras: [
+        { id: 'x', content: 'x', enabled: true },
+        { id: 'a', content: 'dup' },
+        { id: HEAVY_SLOT_ID },
+      ],
+    });
+    expect(preset.extras.map(e => [e.id, e.enabled])).toEqual([['x', false]]);
+    expect(preset.entries.map(e => e.id)).toEqual(['a', HEAVY_SLOT_ID]);
+    expect(normalizeHeavyPreset({ entries: [] }).extras).toEqual([]);
+  });
+
+  it('extras 不参与拼装', () => {
+    const preset = normalizeHeavyPreset({ entries: [heavySlotEntry()], extras: [entry({ id: 'x' })] });
+    expect(heavyPresetUsable({ ...preset, enabled: true })).toBe(false);
+    expect(assembleHeavyMessages(preset.entries, DEFAULT_CHAIN)).toEqual(DEFAULT_CHAIN);
+  });
+
   it('空值回落默认:开启、只有占位', () => {
     const preset = normalizeHeavyPreset(undefined);
     expect(preset.enabled).toBe(true);

@@ -39,6 +39,11 @@ export interface HeavyPresetSettings {
   entries: HeavyEntry[];
   /** 合并相邻的 system 消息(取自预设的 squash_system_messages,与酒馆同义)。 */
   squash: boolean;
+  /**
+   * 没在顺序里的条目:预设条目库(prompts)里有、但酒馆条目列表(prompt_order)里没放的。
+   * 酒馆里看不到也不发送;这里单独收着、永不发送,用户可以挑出来「加入末尾」。
+   */
+  extras: HeavyEntry[];
 }
 
 export function heavySlotEntry(): HeavyEntry {
@@ -55,7 +60,7 @@ export function heavySlotEntry(): HeavyEntry {
 }
 
 export function heavyPresetDefaults(): HeavyPresetSettings {
-  return { enabled: true, name: '', entries: [heavySlotEntry()], squash: false };
+  return { enabled: true, name: '', entries: [heavySlotEntry()], squash: false, extras: [] };
 }
 
 function normalizeRole(value: unknown): HeavyRole {
@@ -67,39 +72,48 @@ function finiteInt(value: unknown, fallback: number, min = 0): number {
   return Number.isFinite(n) ? Math.max(min, Math.floor(n)) : fallback;
 }
 
-/** 设置兜底:逐字段补全;占位条目缺了补到末尾、重复的只留第一个,其余条目 id 去重。 */
+function normalizeEntry(id: string, e: Partial<HeavyEntry>): HeavyEntry {
+  return {
+    id,
+    name: typeof e.name === 'string' ? e.name : id,
+    role: normalizeRole(e.role),
+    content: typeof e.content === 'string' ? e.content : '',
+    enabled: typeof e.enabled === 'boolean' ? e.enabled : true,
+    position: e.position === 'depth' ? 'depth' : 'relative',
+    depth: finiteInt(e.depth, 4),
+    order: finiteInt(e.order, 100, Number.MIN_SAFE_INTEGER),
+  };
+}
+
+/**
+ * 设置兜底:逐字段补全;占位条目缺了补到末尾、重复的只留第一个,两个列表合起来 id 去重;
+ * 没在顺序里的条目(extras)不收占位、一律关闭。
+ */
 export function normalizeHeavyPreset(raw: unknown): HeavyPresetSettings {
   const d = heavyPresetDefaults();
   const r = (raw && typeof raw === 'object' ? raw : {}) as Partial<HeavyPresetSettings>;
-  const entries: HeavyEntry[] = [];
   const seen = new Set<string>();
-  for (const item of Array.isArray(r.entries) ? r.entries : []) {
-    if (!item || typeof item !== 'object') continue;
-    const e = item as Partial<HeavyEntry>;
-    const id = typeof e.id === 'string' && e.id ? e.id : '';
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    if (id === HEAVY_SLOT_ID) {
-      entries.push(heavySlotEntry());
-      continue;
+  const take = (list: unknown, inOrder: boolean): HeavyEntry[] => {
+    const out: HeavyEntry[] = [];
+    for (const item of Array.isArray(list) ? list : []) {
+      if (!item || typeof item !== 'object') continue;
+      const e = item as Partial<HeavyEntry>;
+      const id = typeof e.id === 'string' && e.id ? e.id : '';
+      if (!id || seen.has(id) || (!inOrder && id === HEAVY_SLOT_ID)) continue;
+      seen.add(id);
+      if (id === HEAVY_SLOT_ID) out.push(heavySlotEntry());
+      else out.push(inOrder ? normalizeEntry(id, e) : { ...normalizeEntry(id, e), enabled: false });
     }
-    entries.push({
-      id,
-      name: typeof e.name === 'string' ? e.name : id,
-      role: normalizeRole(e.role),
-      content: typeof e.content === 'string' ? e.content : '',
-      enabled: typeof e.enabled === 'boolean' ? e.enabled : true,
-      position: e.position === 'depth' ? 'depth' : 'relative',
-      depth: finiteInt(e.depth, 4),
-      order: finiteInt(e.order, 100, Number.MIN_SAFE_INTEGER),
-    });
-  }
+    return out;
+  };
+  const entries = take(r.entries, true);
   if (!seen.has(HEAVY_SLOT_ID)) entries.push(heavySlotEntry());
   return {
     enabled: typeof r.enabled === 'boolean' ? r.enabled : d.enabled,
     name: typeof r.name === 'string' ? r.name : d.name,
     entries,
     squash: typeof r.squash === 'boolean' ? r.squash : d.squash,
+    extras: take(r.extras, false),
   };
 }
 
@@ -145,7 +159,8 @@ function pickOrder(rawOrder: unknown): STOrderItem[] | null {
 /**
  * 解析酒馆预设 JSON(整份聊天补全预设,或提示词管理器单独导出的 {data:{prompts,prompt_order}})。
  *
- * - 按 prompt_order 排序与取开关;不在 order 里的条目追加在末尾、默认关闭。开关只认
+ * - 列表的顺序与开关与酒馆里一模一样:按 prompt_order 排序与取开关。条目库里有、但
+ *   prompt_order 没放的条目(酒馆里看不到、也不发)不进列表,单独放进 extras。开关只认
  *   prompt_order[].enabled(酒馆提示词管理器的勾选框写在那里);prompts[].enabled 在导出的
  *   预设里几乎恒为 false 或缺失,不是开关状态,只在整份预设没有 prompt_order 时兜底。
  * - 标记条目(角色卡、世界书、示例对话等,由酒馆现场填充)不导入:柏宝绘的默认提示词已自带
@@ -155,6 +170,8 @@ function pickOrder(rawOrder: unknown): STOrderItem[] | null {
  */
 export interface STPresetImport {
   entries: HeavyEntry[];
+  /** 没在顺序里的条目(标记条目除外),一律关闭。 */
+  extras: HeavyEntry[];
   squash: boolean;
   /** 导入的条目数(不含占位)、其中启用的数目。 */
   promptCount: number;
@@ -187,11 +204,30 @@ export function parseSTPreset(json: unknown): STPresetImport {
     placed.add(id);
     sequence.push({ id, enabled: typeof item.enabled === 'boolean' ? item.enabled : true });
   }
+  // 没有 order 时全部按 prompts 原序进列表、按条目自身开关;有 order 时不在里面的是酒馆
+  // 不会发的条目,收进 extras
+  const orphans: string[] = [];
   for (const id of byId.keys()) {
     if (placed.has(id)) continue;
-    // 没有 order 时全都按条目自身开关;有 order 时不在里面的就是酒馆不会发的
-    sequence.push({ id, enabled: order ? false : null });
+    if (order) orphans.push(id);
+    else sequence.push({ id, enabled: null });
   }
+
+  const toEntry = (id: string, p: STPromptRaw, enabled: boolean | null): HeavyEntry => {
+    const triggers = Array.isArray(p.injection_trigger) ? p.injection_trigger : [];
+    const triggerOk = !triggers.length || triggers.includes('normal');
+    const selfEnabled = typeof p.enabled === 'boolean' ? p.enabled : true;
+    return {
+      id,
+      name: typeof p.name === 'string' && p.name.trim() ? p.name : id,
+      role: normalizeRole(p.role),
+      content: typeof p.content === 'string' ? p.content : '',
+      enabled: (enabled ?? selfEnabled) && triggerOk,
+      position: Number(p.injection_position) === 1 ? 'depth' : 'relative',
+      depth: finiteInt(p.injection_depth, 4),
+      order: finiteInt(p.injection_order, 100, Number.MIN_SAFE_INTEGER),
+    };
+  };
 
   const entries: HeavyEntry[] = [];
   let slotPlaced = false;
@@ -207,24 +243,16 @@ export function parseSTPreset(json: unknown): STPresetImport {
       droppedMarkers++;
       continue;
     }
-    const triggers = Array.isArray(p.injection_trigger) ? p.injection_trigger : [];
-    const triggerOk = !triggers.length || triggers.includes('normal');
-    const selfEnabled = typeof p.enabled === 'boolean' ? p.enabled : true;
-    entries.push({
-      id,
-      name: typeof p.name === 'string' && p.name.trim() ? p.name : id,
-      role: normalizeRole(p.role),
-      content: typeof p.content === 'string' ? p.content : '',
-      enabled: (enabled ?? selfEnabled) && triggerOk,
-      position: Number(p.injection_position) === 1 ? 'depth' : 'relative',
-      depth: finiteInt(p.injection_depth, 4),
-      order: finiteInt(p.injection_order, 100, Number.MIN_SAFE_INTEGER),
-    });
+    entries.push(toEntry(id, p, enabled));
   }
   if (!slotPlaced) entries.push(heavySlotEntry());
+  const extras = orphans
+    .filter(id => id !== CHAT_HISTORY_ID && byId.get(id)!.marker !== true)
+    .map(id => toEntry(id, byId.get(id)!, false));
   const imported = entries.filter(e => e.id !== HEAVY_SLOT_ID);
   return {
     entries,
+    extras,
     squash: data?.squash_system_messages === true || root?.squash_system_messages === true,
     promptCount: imported.length,
     enabledCount: imported.filter(e => e.enabled).length,
