@@ -61,3 +61,8 @@ export function openLightbox(options: LightboxOptions): void {
     container,
   );
 }
+
+/** fork:关掉当前灯箱(图片浏览切到没图的卡片时用)。 */
+export function closeLightbox(): void {
+  closeCurrent?.();
+}
