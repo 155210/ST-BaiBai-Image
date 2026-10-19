@@ -10,6 +10,7 @@ import { beginGeneration, clearGeneration, consumeGeneration } from '@/autoTag/g
 import { autoTagProfile, buildAutoTagMessages } from '@/autoTag/prompt';
 import { rebaseImagePositions, type RebaseReport } from '@/autoTag/rebase';
 import { buildSlotTaskNote } from '@/autoTag/slotPlan';
+import { withRewriteHint } from '@/rewriteHint/hint';
 import {
   BBI_CHAR_EXTRA_KEY,
   CHAR_TAG_FIELDS,
@@ -110,7 +111,7 @@ interface RunOptions {
    * slotPlan.buildSlotTaskNote。分析基底同样剔除全部旧 tag,但强制输出恰好 1 张,
    * 且忽略本次 AI 的 changes(首次全量分析已为整楼建过档)。
    */
-  slot?: { seq: number };
+  slot?: { seq: number; /** fork:用户写的重写要求,见 rewriteHint/。 */ hint?: string };
   /**
    * 批量调用:不弹逐楼 toast(结果走返回值,由调用方汇总),也不挂自动出图标记——
    * 批量写的楼大多不在页面上,标记会一直挂到用户翻到那楼才突然出图。
@@ -332,7 +333,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
       memory,
       preparedTarget,
       anchors.text,
-      slot ? buildSlotTaskNote(rawSource, slot.seq) : '',
+      slot ? withRewriteHint(buildSlotTaskNote(rawSource, slot.seq), slot.hint) : '',
       profile,
     );
     const channel = getTagGenChannel();
@@ -647,8 +648,8 @@ export async function requestFloorTags(
  * 分析基底剔除全部旧 tag(AI 不该把 tag 当正文),强制输出 1 张;本楼其它 tag 与图片
  * 一字不动,旧图留在该槽位历史里。本次 AI 输出的 changes 一律忽略(首次全量分析时已建档)。
  */
-export async function requestSlotTag(floor: number, seq: number): Promise<void> {
-  await runForFloor(floor, { manual: true, slot: { seq } });
+export async function requestSlotTag(floor: number, seq: number, hint = ''): Promise<void> {
+  await runForFloor(floor, { manual: true, slot: { seq, hint } });
 }
 
 /** 中止某楼在途的 tag 请求(全量分析与单槽重写共用同一把「每楼一把」的锁)。 */
