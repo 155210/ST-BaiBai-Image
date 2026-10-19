@@ -16,14 +16,17 @@ import {
   startBatch,
   stopBatch,
 } from '@/batch/controller';
+import { jumpToFloor } from '@/batch/gallery';
 import type { BatchKind } from '@/batch/jobStore';
-import { parseFloorRange } from '@/batch/range';
-import { getContext } from '@/st/context';
+import { parseFloorRange, pickEveryNth } from '@/batch/range';
+import { batchRange } from '@/batch/rangeStore';
+import { getContext, isAiStoryMessage } from '@/st/context';
 
 /**
- * 批量页的一种任务(写 tag / 出图):输入、开跑确认、进度与本聊天的记录。
+ * 批量页的一种任务(写 tag / 出图):开跑确认、进度与本聊天的记录。
  * 逻辑都在 batch/controller.ts,这里只管输入与展示。
- * 范围与间隔记在浏览器本地(只是方便下次打开),不进插件设置。
+ * 楼层范围与「每 N 个 AI 楼」是整页共用的(batch/rangeStore.ts);
+ * 间隔记在浏览器本地(只是方便下次打开),不进插件设置。
  */
 
 const props = defineProps<{
@@ -37,8 +40,7 @@ const TEXT = {
     title: '批量写生图 tag',
     intro:
       '按楼层范围，给还没有 tag 的 AI 楼逐楼写生图 tag，和点楼层上的「生成 tag」按钮效果一样。只写 tag，不出图。',
-    unit: '楼需要写 tag',
-    skip: '已有 tag 和非 AI 楼会跳过',
+    skip: '已有 tag 的楼会跳过',
     gapHint: '副 API 有频率限制时调大一点。',
     defaultGap: '2',
   },
@@ -46,14 +48,12 @@ const TEXT = {
     title: '批量出图',
     intro:
       '按楼层范围，给已经写好、但还没出过图的 tag 逐张出图，和点卡片上的「生成图片」效果一样。改过提示词、只剩旧图的也会出一张新的。',
-    unit: '楼有没图的 tag',
     skip: '没有 tag 或图都已出好的楼会跳过',
     gapHint: '每楼出完后等一会儿再出下一楼，出图渠道有频率限制时调大一点。',
     defaultGap: '3',
   },
 }[props.kind];
 
-const RANGE_KEY = `bbi_batch_${props.kind}_range`;
 const GAP_KEY = `bbi_batch_${props.kind}_gap_seconds`;
 
 function readLocal(key: string, fallback: string): string {
@@ -72,10 +72,8 @@ function writeLocal(key: string, value: string): void {
   }
 }
 
-const rangeText = ref(readLocal(RANGE_KEY, ''));
 const gapSeconds = ref(Number(readLocal(GAP_KEY, TEXT.defaultGap)) || 0);
 
-watch(rangeText, value => writeLocal(RANGE_KEY, value));
 watch(gapSeconds, value => writeLocal(GAP_KEY, String(value)));
 
 const gapMs = computed(() => Math.round(Math.min(60, Math.max(0, Number(gapSeconds.value) || 0)) * 1000));
@@ -86,12 +84,15 @@ const plan = computed(() => {
   void batchState.running;
   const chat = getContext()?.chat ?? [];
   try {
-    const floors = parseFloorRange(rangeText.value, chat.length - 1);
-    const todo = floors.filter(eligible);
+    const floors = parseFloorRange(batchRange.text, chat.length - 1);
+    const ai = floors.filter(floor => isAiStoryMessage(chat[floor]));
+    const picked = pickEveryNth(ai, batchRange.step);
+    const todo = picked.filter(floor => eligible(floor));
     const images = props.kind === 'image' ? todo.reduce((sum, floor) => sum + pendingImageCount(floor), 0) : 0;
-    return { floors, todo, images, error: '' };
+    return { floors, ai, picked, todo, images, error: '' };
   } catch (error) {
-    return { floors: [], todo: [], images: 0, error: error instanceof Error ? error.message : String(error) };
+    const message = error instanceof Error ? error.message : String(error);
+    return { floors: [], ai: [], picked: [], todo: [], images: 0, error: message };
   }
 });
 
@@ -132,7 +133,7 @@ async function start(): Promise<void> {
     toastr.warning(blocker, '柏宝绘');
     return;
   }
-  const { floors, todo, images, error } = plan.value;
+  const { floors, ai, picked, todo, images, error } = plan.value;
   if (error) {
     toastr.warning(error, '柏宝绘');
     return;
@@ -141,12 +142,14 @@ async function start(): Promise<void> {
     toastr.info(`这个范围里没有要处理的楼（${TEXT.skip}）`, '柏宝绘');
     return;
   }
+  const sampled = batchRange.step > 1 ? `，每 ${batchRange.step} 个 AI 楼取 1 个 → ${picked.length} 楼` : '';
+  const head = `范围内 ${floors.length} 楼，AI 楼 ${ai.length} 楼${sampled}。\n`;
   const replacing = job.value && job.value.status !== 'done' ? '\n\n本聊天上次没跑完的记录会被这次覆盖。' : '';
   const body =
     props.kind === 'tag'
-      ? `范围内 ${floors.length} 楼，其中 ${todo.length} 楼需要写 tag（已有 tag 和非 AI 楼跳过）。\n` +
+      ? `${head}其中 ${todo.length} 楼需要写 tag（已有 tag 的跳过）。\n` +
         `一楼一楼按顺序跑，每楼调用一次副 API，每楼之间隔 ${gapMs.value / 1000} 秒。\n只写 tag，不会自动出图。`
-      : `范围内 ${floors.length} 楼，其中 ${todo.length} 楼共 ${images} 张图还没出。\n` +
+      : `${head}其中 ${todo.length} 楼共 ${images} 张图还没出。\n` +
         `一张一张按顺序出，每楼之间隔 ${gapMs.value / 1000} 秒。会消耗出图额度。`;
   const ok = await confirmDialog({ title: TEXT.title, text: body + replacing, confirmText: '开始' });
   if (ok) startBatch(props.kind, todo, gapMs.value);
@@ -157,26 +160,11 @@ async function start(): Promise<void> {
   <Collapsible :title="TEXT.title" :open="true">
     <p class="bbi-field-hint">{{ TEXT.intro }}</p>
 
-    <div class="bbi-field">
-      <div class="bbi-field-head">
-        <span class="bbi-field-label">楼层范围</span>
-        <span class="bbi-field-value">
-          {{ plan.error ? '' : kind === 'tag' ? `需写 ${plan.todo.length} 楼` : `${plan.todo.length} 楼 ${plan.images} 张` }}
-        </span>
-      </div>
-      <input
-        v-model="rangeText"
-        class="bbi-input"
-        type="text"
-        inputmode="text"
-        placeholder="留空 = 整个聊天；例：0-500, 800-"
-        :disabled="busy"
-      />
-      <p v-if="plan.error" class="bbi-field-hint bbi-batch-error">{{ plan.error }}</p>
-      <p v-else class="bbi-field-hint">
-        范围内 {{ plan.floors.length }} 楼，{{ TEXT.skip }}。楼号就是酒馆里显示的楼号。
-      </p>
-    </div>
+    <p class="bbi-field-hint bbi-batch-plan" :class="{ 'bbi-batch-error': plan.error }">
+      <template v-if="plan.error">{{ plan.error }}</template>
+      <template v-else-if="kind === 'tag'">要写 {{ plan.todo.length }} 楼（{{ TEXT.skip }}）</template>
+      <template v-else>{{ plan.todo.length }} 楼共 {{ plan.images }} 张没出（{{ TEXT.skip }}）</template>
+    </p>
 
     <label class="bbi-num-row">
       <span class="bbi-field-label">每楼间隔（秒）</span>
@@ -251,7 +239,9 @@ async function start(): Promise<void> {
 
       <ul v-if="job.fails.length" class="bbi-batch-list bbi-batch-fails">
         <li v-for="item in job.fails" :key="item.floor">
-          <span class="bbi-batch-floor">#{{ item.floor }}</span>
+          <button class="bbi-batch-floor" type="button" title="定位到这一楼" @click="jumpToFloor(item.floor)">
+            #{{ item.floor }}
+          </button>
           <span>{{ item.reason }}</span>
         </li>
       </ul>
@@ -324,7 +314,17 @@ async function start(): Promise<void> {
 }
 .bbi-batch-floor {
   flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
   font-family: var(--bbi-font-mono);
+  color: var(--bbi-accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.bbi-batch-plan {
+  font-weight: 600;
   color: var(--bbi-ink);
 }
 </style>

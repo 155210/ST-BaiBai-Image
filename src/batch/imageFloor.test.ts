@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { pendingImageSeqs } from '@/batch/imageFloor';
+import { pendingImageSeqs, slotImageState } from '@/batch/imageFloor';
 import { markImageMissing, resetMissingImages } from '@/floor/missingImages';
 import { BBI_IMAGE_EXTRA_KEY, promptHash } from '@/floor/storage';
 import type { STMessage } from '@/st/context';
@@ -48,5 +48,30 @@ describe('pendingImageSeqs', () => {
     const message = floor(`a\n${TAG_A}`, { [promptHash(TAG_A)]: [entry(0)] }, 1);
     expect(pendingImageSeqs(message)).toEqual([]);
     expect(pendingImageSeqs({ ...message, swipe_id: 0 } as STMessage)).toEqual([0]);
+  });
+});
+
+describe('slotImageState and modes', () => {
+  const OLD = '<bbi_image>old</bbi_image>';
+  const message = floor(`a\n${TAG_A}\nb\n${TAG_B}\nc\n<bbi_image>x</bbi_image>`, {
+    [promptHash(TAG_A)]: [entry(0)],
+    [promptHash(OLD)]: [entry(1, 'old1.png')],
+  });
+
+  it('tells has / stale / none apart', () => {
+    expect(slotImageState(message, TAG_A, 0)).toBe('has');
+    expect(slotImageState(message, TAG_B, 1)).toBe('stale');
+    expect(slotImageState(message, '<bbi_image>x</bbi_image>', 2)).toBe('none');
+  });
+
+  it('a stale image whose file is gone counts as none', () => {
+    markImageMissing('old1.png');
+    expect(slotImageState(message, TAG_B, 1)).toBe('none');
+  });
+
+  it('picks slots by mode', () => {
+    expect(pendingImageSeqs(message)).toEqual([1, 2]);
+    expect(pendingImageSeqs(message, 'none')).toEqual([2]);
+    expect(pendingImageSeqs(message, 'stale')).toEqual([1]);
   });
 });

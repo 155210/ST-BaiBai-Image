@@ -2,7 +2,8 @@ import { reactive } from 'vue';
 
 import { backendStatus } from '@/generate';
 import { cancelFloorTags, requestFloorTags } from '@/autoTag/runner';
-import { cancelCurrentImage, pendingImageSeqs, runImageFloor } from '@/batch/imageFloor';
+import { cancelCurrentImage, pendingImageSeqs, runImageFloor, type ImageMode } from '@/batch/imageFloor';
+import { notifyDone } from '@/batch/notify';
 import { clearJob, createJob, loadJob, saveJob, type BatchJob, type BatchKind } from '@/batch/jobStore';
 import { DEFAULT_LOOP_OPTIONS, runBatchLoop } from '@/batch/loop';
 import { saveAndVerify } from '@/batch/verifySaved';
@@ -60,16 +61,20 @@ export function needsTag(floor: number): boolean {
 }
 
 /** 出图:本楼有还没图的 tag。 */
-export function needsImage(floor: number): boolean {
-  return pendingImageSeqs(getContext()?.chat?.[floor]).length > 0;
+export function needsImage(floor: number, mode: ImageMode = 'all'): boolean {
+  return pendingImageSeqs(getContext()?.chat?.[floor], mode).length > 0;
 }
 
 /** 本楼要出几张图(预估用)。 */
-export function pendingImageCount(floor: number): number {
-  return pendingImageSeqs(getContext()?.chat?.[floor]).length;
+export function pendingImageCount(floor: number, mode: ImageMode = 'all'): number {
+  return pendingImageSeqs(getContext()?.chat?.[floor], mode).length;
 }
 
-const ELIGIBLE: Record<BatchKind, (floor: number) => boolean> = { tag: needsTag, image: needsImage };
+function eligible(job: BatchJob): (floor: number) => boolean {
+  if (job.kind === 'tag') return needsTag;
+  const mode = job.mode ?? 'all';
+  return floor => needsImage(floor, mode);
+}
 
 /** 打开批量页或切聊天时调用:载入当前聊天的任务记录。 */
 export function refreshBatchJobs(): void {
@@ -167,10 +172,12 @@ async function run(job: BatchJob, gapMs: number): Promise<void> {
       {
         runFloor: floor => {
           batchState.currentFloor = floor;
-          return kind === 'tag' ? requestFloorTags(floor, { quiet: true }) : runImageFloor(floor, signal);
+          return kind === 'tag'
+            ? requestFloorTags(floor, { quiet: true })
+            : runImageFloor(floor, signal, job.mode ?? 'all');
         },
         currentChatId,
-        isEligible: ELIGIBLE[kind],
+        isEligible: eligible(job),
         isHidden: () => document.hidden,
         waitVisible,
         sleep,
@@ -199,6 +206,7 @@ async function run(job: BatchJob, gapMs: number): Promise<void> {
   log(`${LABEL[kind]}${job.status === 'done' ? '跑完了' : job.note}：${done}，失败 ${job.fails.length} 楼`);
   if (job.status === 'done') {
     toastr.success(`${LABEL[kind]}跑完：${done}，失败 ${job.fails.length} 楼`, '柏宝绘');
+    notifyDone(`${LABEL[kind]}跑完了`, `${done}，失败 ${job.fails.length} 楼`);
   }
   await verify(job);
 }
@@ -228,10 +236,10 @@ async function verify(job: BatchJob): Promise<void> {
   }
 }
 
-/** 按楼号开一个新任务(会覆盖本聊天同种类的旧记录)。 */
-export function startBatch(kind: BatchKind, floors: number[], gapMs: number): void {
+/** 按楼号开一个新任务(会覆盖本聊天同种类的旧记录)。mode 只对出图有用。 */
+export function startBatch(kind: BatchKind, floors: number[], gapMs: number, mode: ImageMode = 'all'): void {
   if (batchBlocker(kind)) return;
-  const job = createJob(kind, currentChatId(), floors);
+  const job = createJob(kind, currentChatId(), floors, mode);
   saveJob(job);
   log(`${LABEL[kind]}开始：共 ${floors.length} 楼`);
   void run(job, gapMs);
@@ -251,7 +259,12 @@ export function retryFailed(kind: BatchKind, gapMs: number): void {
   if (batchBlocker(kind)) return;
   const old = loadJob(kind, currentChatId());
   if (!old?.fails.length) return;
-  const job = createJob(kind, old.chatId, old.fails.map(item => item.floor).sort((a, b) => a - b));
+  const job = createJob(
+    kind,
+    old.chatId,
+    old.fails.map(item => item.floor).sort((a, b) => a - b),
+    old.mode ?? 'all',
+  );
   saveJob(job);
   log(`${LABEL[kind]}：重试失败的 ${job.floors.length} 楼`);
   void run(job, gapMs);
