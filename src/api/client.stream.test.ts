@@ -19,16 +19,16 @@ vi.mock('@/state/history', () => ({
   },
 }));
 
-const live = vi.hoisted(() => ({ pieces: [] as string[], ends: [] as string[] }));
+const live = vi.hoisted(() => ({ pieces: [] as string[], ends: [] as string[], metas: [] as unknown[] }));
 vi.mock('@/stream/live', () => ({
-  beginStream: () => ({
+  beginStream: (_source: string, meta: unknown) => (live.metas.push(meta), {
     push: (piece: string) => live.pieces.push(piece),
     end: (error = '') => live.ends.push(error),
   }),
 }));
 
 vi.mock('@/st/context', () => ({
-  getContext: () => ({ getRequestHeaders: () => ({}) }),
+  getContext: () => ({ getRequestHeaders: () => ({}), getCurrentChatId: () => 'chat-1' }),
 }));
 
 const channel: ApiChannel = {
@@ -75,6 +75,7 @@ afterEach(() => {
   vi.useRealTimers();
   live.pieces.length = 0;
   live.ends.length = 0;
+  live.metas.length = 0;
 });
 
 describe('流式:按「多少秒没有新内容」算超时', () => {
@@ -114,5 +115,61 @@ describe('流式:按「多少秒没有新内容」算超时', () => {
     const check = expect(done).rejects.toThrow('超时(>1秒)');
     await vi.advanceTimersByTimeAsync(1500);
     await check;
+  });
+});
+
+/** 按给定间隔吐出原样文本块(可以是心跳、没换行的结尾等)。 */
+function rawSse(chunks: string[], gaps: number[], signal?: AbortSignal | null): Response {
+  const enc = new TextEncoder();
+  let i = 0;
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        signal?.addEventListener('abort', () => controller.error(new DOMException('aborted', 'AbortError')));
+      },
+      async pull(controller) {
+        if (signal?.aborted) return;
+        if (i >= chunks.length) {
+          controller.close();
+          return;
+        }
+        await new Promise(resolve => setTimeout(resolve, gaps[i]));
+        controller.enqueue(enc.encode(chunks[i]));
+        i++;
+      },
+    }),
+    { headers: { 'content-type': 'text/event-stream' } },
+  );
+}
+
+const delta = (content: string) => `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}`;
+
+describe('流式:细节', () => {
+  it('心跳行和空 delta 不算新内容,不给超时续命', async () => {
+    vi.useFakeTimers();
+    const beats = [`${delta('a')}\n\n`, ...Array.from({ length: 8 }, (_, k) => (k % 2 ? ': keep-alive\n\n' : 'data: {"choices":[{"delta":{}}]}\n\n'))];
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => rawSse(beats, [100, ...beats.slice(1).map(() => 400)], init.signal)));
+    const done = requestCompletion(channel, messages, { source: '测试' });
+    const check = expect(done).rejects.toThrow('1秒没有新内容');
+    await vi.advanceTimersByTimeAsync(5000);
+    await check;
+  });
+
+  it('最后一行没有换行也能读到', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => rawSse([`${delta('前半')}\n`, delta('后半')], [10, 10], init.signal)));
+    const done = requestCompletion(channel, messages, { source: '测试' });
+    await vi.advanceTimersByTimeAsync(100);
+    await expect(done).resolves.toBe('前半后半');
+    expect(live.pieces.join('')).toBe('前半后半');
+  });
+
+  it('把聊天和楼层交给实时输出,楼层折叠区靠它定位', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => slowSse(['x'], [10], init.signal)));
+    const done = requestCompletion(channel, messages, { source: '测试', floor: 7 });
+    await vi.advanceTimersByTimeAsync(100);
+    await expect(done).resolves.toBe('x');
+    expect(live.metas).toEqual([{ chatId: 'chat-1', floor: 7 }]);
   });
 });

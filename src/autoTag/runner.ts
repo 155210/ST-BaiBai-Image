@@ -382,6 +382,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
             signal: controller.signal,
             source,
             validate,
+            floor, // fork:流式时楼层上的实时折叠区
           });
         } else {
           await requestViaMainApi(messages, {

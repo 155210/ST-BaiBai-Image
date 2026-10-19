@@ -2,34 +2,21 @@
 import { nextTick, onUnmounted, ref, watch } from 'vue';
 
 import { streamView, watchStream } from './live';
+import { readOpenPref, writeOpenPref } from './openPref';
 
 /**
  * 「实时输出」折叠区(本 fork 新增)。
  * 收起时不渲染文本、不跑刷新定时器;展开后每 0.5 秒刷新一次。展开状态记在浏览器本地。
  */
 
-const OPEN_KEY = 'bbi_stream_view_open';
-
-function readOpen(): boolean {
-  try {
-    return localStorage.getItem(OPEN_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
-const open = ref(readOpen());
+const open = ref(readOpenPref());
 const box = ref<HTMLElement | null>(null);
 let release: (() => void) | null = null;
 
 watch(
   open,
   value => {
-    try {
-      localStorage.setItem(OPEN_KEY, value ? '1' : '0');
-    } catch {
-      /* 记不住就算了 */
-    }
+    writeOpenPref(value);
     if (value && !release) release = watchStream();
     if (!value && release) {
       release();

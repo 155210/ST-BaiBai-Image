@@ -63,3 +63,32 @@ describe('实时输出:收起不刷新,展开节流刷新', () => {
     release();
   });
 });
+
+describe('楼层折叠区用的在途登记', () => {
+  it('开始/结束各通知一次,新内容不通知;结束后从在途里移除', async () => {
+    const { activeStreams, onStreamsChange } = await import('./live');
+    const changes = vi.fn();
+    const off = onStreamsChange(changes);
+    const tap = beginStream('自动 tag(第 3 楼)', { chatId: 'c1', floor: 3 });
+    expect(changes).toHaveBeenCalledTimes(1);
+    const live = activeStreams().find(item => item.floor === 3);
+    expect(live?.chatId).toBe('c1');
+    tap.push('abc');
+    tap.push('de');
+    expect(changes).toHaveBeenCalledTimes(1);
+    expect(live?.total).toBe(5);
+    tap.end();
+    tap.end('重复调用不再通知');
+    expect(changes).toHaveBeenCalledTimes(2);
+    expect(activeStreams().some(item => item.floor === 3)).toBe(false);
+    off();
+  });
+
+  it('tailText 只留结尾并注明省略了多少字', async () => {
+    const { tailText } = await import('./live');
+    expect(tailText({ text: 'abcdef', total: 6 }, 10)).toBe('abcdef');
+    expect(tailText({ text: 'abcdef', total: 6 }, 3)).toBe('…（前面还有 3 字）\ndef');
+    // text 本身已被截过一次时,省略数按累计字数算
+    expect(tailText({ text: 'def', total: 100 }, 10)).toBe('…（前面还有 97 字）\ndef');
+  });
+});

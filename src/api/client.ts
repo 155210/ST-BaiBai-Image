@@ -1,6 +1,7 @@
 import { getContext } from '@/st/context';
 import type { ApiChannel } from '@/state/settings';
 import { beginStream } from '@/stream/live';
+import { withIdleTimeout } from '@/stream/idle';
 import {
   beginLlm,
   failLlm,
@@ -69,6 +70,8 @@ export interface RequestOptions {
    * 由调用方决定重试/放弃。
    */
   validate?: (content: string) => void;
+  /** fork:这次请求是给哪一楼写的,流式时楼层上的实时折叠区靠它找到位置。 */
+  floor?: number;
 }
 
 /* ============ 请求历史埋点(纯辅助,绝不允许影响主流程) ============ */
@@ -124,8 +127,7 @@ async function withTimeout<T>(
   timeoutSec: number,
   externalSignal: AbortSignal | undefined,
   label: string,
-  task: (signal: AbortSignal, touch: () => void) => Promise<T>,
-  idle = false,
+  task: (signal: AbortSignal) => Promise<T>,
 ): Promise<T> {
   const ctrl = new AbortController();
   let timedOut = false;
@@ -133,23 +135,15 @@ async function withTimeout<T>(
   if (externalSignal?.aborted) onExternalAbort();
   else externalSignal?.addEventListener('abort', onExternalAbort, { once: true });
 
-  const fire = () => {
+  const timer = setTimeout(() => {
     timedOut = true;
     ctrl.abort();
-  };
-  const ms = Math.max(1000, timeoutSec * 1000);
-  let timer = setTimeout(fire, ms);
-  // fork:流式按「多少秒没有新内容」算超时,每收到一块数据就重新计时
-  const touch = () => {
-    if (!idle || timedOut) return;
-    clearTimeout(timer);
-    timer = setTimeout(fire, ms);
-  };
+  }, Math.max(1000, timeoutSec * 1000));
 
   try {
-    return await task(ctrl.signal, touch);
+    return await task(ctrl.signal);
   } catch (e) {
-    if (timedOut) throw new ApiError(idle ? `${label}超时(${timeoutSec}秒没有新内容)` : `${label}超时(>${timeoutSec}秒)`);
+    if (timedOut) throw new ApiError(`${label}超时(>${timeoutSec}秒)`);
     throw e;
   } finally {
     clearTimeout(timer);
@@ -275,8 +269,14 @@ async function requestCompletionAtUrl(
     }),
   );
 
+  // fork:流式按「多少秒没有新内容」算超时(stream/idle.ts),非流式仍按总时长
+  const run = <T,>(task: (signal: AbortSignal, touch: () => void) => Promise<T>): Promise<T> =>
+    stream
+      ? withIdleTimeout(timeoutSec, opts.signal, msg => new ApiError(msg), '副 API 请求', task)
+      : withTimeout(timeoutSec, opts.signal, '副 API 请求', signal => task(signal, () => {}));
+
   try {
-    const result = await withTimeout(timeoutSec, opts.signal, '副 API 请求', async (signal, touch) => {
+    const result = await run(async (signal, touch) => {
       const resp = await fetch(GENERATE_URL, {
         method: 'POST',
         headers: ctx.getRequestHeaders(),
@@ -292,7 +292,10 @@ async function requestCompletionAtUrl(
       // 流式:按 SSE 增量拼接;非流式:直接解析 JSON。
       if (stream) {
         // fork:实时输出面板(src/stream/live.ts)
-        const tap = beginStream(opts.source || '未标注');
+        const tap = beginStream(opts.source || '未标注', {
+          chatId: ctx.getCurrentChatId?.() ?? '',
+          floor: opts.floor,
+        });
         let streamed = '';
         try {
           streamed = await readSseContent(resp, piece => {
@@ -300,7 +303,7 @@ async function requestCompletionAtUrl(
             tap.push(piece);
           });
         } catch (e) {
-          tap.end(e instanceof Error ? e.message : String(e));
+          tap.end(e instanceof DOMException && e.name === 'AbortError' ? '已中断' : e instanceof Error ? e.message : String(e));
           throw e;
         }
         tap.end(streamed ? '' : '返回空内容');
@@ -319,7 +322,7 @@ async function requestCompletionAtUrl(
       if (!parsed) throw new ApiError('副 API 返回空内容');
       // ST 代理非流式分支是 response.send(json) 原样透传,故 usage 是上游真值。
       return { content: parsed, usage: readUsage(data) };
-    }, stream);
+    });
 
     // 验收在记历史之前:验收不过 → 落进 catch 记失败,不给「HTTP 成功」的假象
     opts.validate?.(result.content);
@@ -368,11 +371,18 @@ export async function readSseContent(resp: Response, onChunk?: (piece: string) =
     const { done, value } = await reader.read();
     if (done) break;
     buf += decoder.decode(value, { stream: true });
-    let chunkText = '';
-    let gotData = false;
     // 按行解析,保留最后一段不完整的行到下次
     const lines = buf.split('\n');
     buf = lines.pop() ?? '';
+    emit(lines);
+  }
+  // fork:流末尾没有换行的最后一行也要解析(有的代理不补结尾换行)
+  buf += decoder.decode();
+  emit([buf]);
+  return out.trim() || reasoningOut.trim();
+
+  function emit(lines: string[]): void {
+    let chunkText = '';
     for (const line of lines) {
       const t = line.trim();
       if (!t || !t.startsWith('data:')) continue;
@@ -380,7 +390,6 @@ export async function readSseContent(resp: Response, onChunk?: (piece: string) =
       if (payload === '[DONE]') continue;
       try {
         const json = JSON.parse(payload);
-        gotData = true;
         if (json?.error) throw new ApiError(json.error.message || '副 API 返回错误');
         const choice = json?.choices?.[0];
         const src = choice?.delta ?? choice?.message;
@@ -395,10 +404,9 @@ export async function readSseContent(resp: Response, onChunk?: (piece: string) =
         // 单行解析失败忽略(可能是注释行/心跳)
       }
     }
-    // fork:心跳/注释行不算「有新内容」,不给无响应计时续命
-    if (gotData) onChunk?.(chunkText);
+    // fork:只有真出了字才算「有新内容」;心跳/注释行/空 delta 不给无响应计时续命
+    if (chunkText) onChunk?.(chunkText);
   }
-  return out.trim() || reasoningOut.trim();
 }
 
 /** 把可能是 string / content-parts 数组 / 其他类型的值转成文本;非字符串成分一律丢弃。 */
