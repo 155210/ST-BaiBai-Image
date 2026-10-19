@@ -91,7 +91,7 @@ function searchLibrary(): void {
         />
         <button class="bbi-btn bbi-btn-primary" type="button" @click="search">搜索</button>
       </div>
-      <p class="bbi-field-hint">搜索不看上面的楼层范围，总是搜整个聊天。</p>
+      <p class="bbi-field-hint">搜索总是搜整个聊天，不看楼层范围。</p>
     </div>
 
     <div class="bbi-search-row">

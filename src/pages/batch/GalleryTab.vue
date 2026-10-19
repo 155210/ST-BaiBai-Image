@@ -15,17 +15,18 @@ import {
 } from '@/batch/gallery';
 import { openGalleryLightbox } from '@/batch/galleryLightbox';
 import { parseFloorRange } from '@/batch/range';
-import { batchRange } from '@/batch/rangeStore';
+import { batchRange, galleryRange } from '@/batch/rangeStore';
 import type { BbiImageEntry } from '@/floor/storage';
 import { getContext } from '@/st/context';
 import GalleryItem from './GalleryItem.vue';
+import RangeField from './RangeField.vue';
 
 /**
  * 批量页「图片浏览」:按楼层范围翻看每个 tag 的图。逻辑在 batch/gallery.ts。
  * 筛选、顺序、大小记在浏览器本地,不进插件设置。
  */
 
-const props = defineProps<{ chatTick: number }>();
+const props = defineProps<{ chatTick: number; lastFloor: number }>();
 const emit = defineEmits<{ goRun: [] }>();
 
 const PREFS_KEY = 'bbi_batch_gallery_prefs';
@@ -91,7 +92,7 @@ async function load(): Promise<void> {
   }
   let floors: number[];
   try {
-    floors = parseFloorRange(batchRange.text, chat.length - 1);
+    floors = parseFloorRange(galleryRange.text, chat.length - 1);
   } catch (reason) {
     slots.value = [];
     error.value = reason instanceof Error ? reason.message : String(reason);
@@ -140,6 +141,12 @@ function jumpInput(): void {
   const target = Math.floor(Number(pageInput.value));
   if (target >= 1) goto(target - 1);
   else pageInput.value = String(page.value + 1);
+}
+
+/** 照搬批量生成的范围并刷新。 */
+function syncRange(): void {
+  galleryRange.text = batchRange.text;
+  void load();
 }
 
 /** 点开大图;灯箱里左右切到别的卡片时,列表翻到那一页。 */
@@ -226,6 +233,13 @@ onUnmounted(() => {
 
 <template>
   <div ref="top" class="bbi-sections">
+    <RangeField v-model="galleryRange.text" :last-floor="lastFloor" note="改完点「刷新列表」。">
+      <template #actions>
+        <button class="bbi-btn bbi-btn-sm" type="button" title="照搬「批量生成」的楼层范围并刷新列表" @click="syncRange">
+          同步批量
+        </button>
+      </template>
+    </RangeField>
     <div class="bbi-gtools">
       <BbiSelect v-model="prefs.filter" :options="FILTERS" class="bbi-gfilter" />
       <button class="bbi-btn bbi-btn-sm" type="button" :disabled="loading" @click="load">刷新列表</button>
