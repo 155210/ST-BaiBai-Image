@@ -272,6 +272,11 @@ export function openPromptEditor(options: PromptEditorOptions): void {
         // 失败原因 runner 已经 toast 过了,这里只负责把转圈停掉
       })
       .finally(() => {
+        // fork:图片浏览开的弹窗(给了 regenerate),楼层多半不在页面上,没有卡片来认领
+        // 重写后的出图标记 —— 标记还在就自己出图,图片浏览才看得到生成中 / 排队中
+        if (options.regenerate && consumeAutoGenerate(options.at.chatId, options.at.messageId, options.at.swipeId, options.at.seq)) {
+          options.regenerate();
+        }
         refreshFromMessage();
         paint();
       });

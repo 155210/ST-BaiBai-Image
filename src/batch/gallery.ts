@@ -174,10 +174,20 @@ export async function regenerateSlot(floor: number, seq: number): Promise<void> 
 }
 
 /** 删一张图(与卡片上的删除同一套:先确认,删记录和 images 里的文件)。 */
-export async function deleteSlotImage(floor: number, swipeId: number, entry: BbiImageEntry): Promise<void> {
+export async function deleteSlotImage(
+  floor: number,
+  swipeId: number,
+  entry: BbiImageEntry,
+  roll?: { index: number; total: number },
+): Promise<void> {
+  // 一张卡片 roll 过好几次时写清楚只删哪一次,免得以为整组都没了
+  const which =
+    roll && roll.total > 1
+      ? `只删第 ${roll.index + 1}/${roll.total} 次这一张，另外 ${roll.total - 1} 次保留。`
+      : '同一提示词的其它历史结果不受影响。';
   const ok = await confirmDialog({
-    title: '删除这张图',
-    text: '将删除这张图的聊天记录，无法恢复；images 中的文件会一并删除，files 中的旧图保留。同一提示词的其它历史结果不受影响。',
+    title: roll && roll.total > 1 ? `删除第 ${roll.index + 1} 次这张图` : '删除这张图',
+    text: `${which}这张图的聊天记录删掉后无法恢复；images 中的文件会一并删除，files 中的旧图保留。`,
     confirmText: '删除',
     tone: 'danger',
   });

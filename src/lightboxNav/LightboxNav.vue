@@ -79,6 +79,9 @@ onBeforeUnmount(() => {
       <button v-if="nav.regenerate" class="bbi-lbnav-pill is-accent" type="button" title="按现在的提示词重新出一张" @click="nav.regenerate()">
         ↻ 重新生成
       </button>
+      <button v-if="nav.edit" class="bbi-lbnav-pill" type="button" title="编辑这张卡片的提示词" @click="nav.edit()">
+        ✎ 编辑
+      </button>
       <button
         v-if="nav.menu?.length"
         class="bbi-lbnav-pill"
