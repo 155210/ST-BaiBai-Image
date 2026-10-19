@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 
 import BbiSelect from '@/components/BbiSelect.vue';
 import { confirmDialog } from '@/components/confirm';
-import { batchBlocker, batchState, startBatch } from '@/batch/controller';
+import { batchBlocker, batchState, savedGapMs, startBatch } from '@/batch/controller';
 import {
   checkSlotFiles,
   filterSlots,
@@ -13,17 +13,20 @@ import {
   type GallerySize,
   type GallerySlot,
 } from '@/batch/gallery';
+import { openGalleryLightbox } from '@/batch/galleryLightbox';
 import { parseFloorRange } from '@/batch/range';
-import { batchRange } from '@/batch/rangeStore';
+import { batchRange, galleryRange } from '@/batch/rangeStore';
+import type { BbiImageEntry } from '@/floor/storage';
 import { getContext } from '@/st/context';
 import GalleryItem from './GalleryItem.vue';
+import RangeField from './RangeField.vue';
 
 /**
  * 批量页「图片浏览」:按楼层范围翻看每个 tag 的图。逻辑在 batch/gallery.ts。
  * 筛选、顺序、大小记在浏览器本地,不进插件设置。
  */
 
-const props = defineProps<{ chatTick: number }>();
+const props = defineProps<{ chatTick: number; lastFloor: number }>();
 const emit = defineEmits<{ goRun: [] }>();
 
 const PREFS_KEY = 'bbi_batch_gallery_prefs';
@@ -89,7 +92,7 @@ async function load(): Promise<void> {
   }
   let floors: number[];
   try {
-    floors = parseFloorRange(batchRange.text, chat.length - 1);
+    floors = parseFloorRange(galleryRange.text, chat.length - 1);
   } catch (reason) {
     slots.value = [];
     error.value = reason instanceof Error ? reason.message : String(reason);
@@ -140,6 +143,29 @@ function jumpInput(): void {
   else pageInput.value = String(page.value + 1);
 }
 
+/** 照搬批量生成的范围并刷新。 */
+function syncRange(): void {
+  galleryRange.text = batchRange.text;
+  void load();
+}
+
+/** 点开大图;灯箱里左右切到别的卡片时,列表翻到那一页。 */
+function openImage(slot: GallerySlot, entry: BbiImageEntry): void {
+  const snapshot = list.value;
+  openGalleryLightbox({
+    list: snapshot,
+    index: snapshot.indexOf(slot),
+    entry,
+    onShow: index => {
+      const target = Math.floor(index / perPage.value);
+      if (target !== page.value) {
+        page.value = target;
+        pageInput.value = String(target + 1);
+      }
+    },
+  });
+}
+
 function setSize(size: GallerySize): void {
   // 换档时尽量停在同一批图附近
   const first = page.value * perPage.value;
@@ -170,15 +196,6 @@ const bulk = computed(() => {
   };
 });
 
-function gapMs(): number {
-  try {
-    const seconds = Number(localStorage.getItem('bbi_batch_image_gap_seconds') ?? '3');
-    return Math.round(Math.min(60, Math.max(0, seconds || 0)) * 1000);
-  } catch {
-    return 3000;
-  }
-}
-
 async function runBulk(): Promise<void> {
   const plan = bulk.value;
   if (!plan) return;
@@ -195,7 +212,7 @@ async function runBulk(): Promise<void> {
     confirmText: '开始',
   });
   if (!ok) return;
-  startBatch('image', plan.floors, gapMs(), plan.mode);
+  startBatch('image', plan.floors, savedGapMs('image'), { mode: plan.mode });
   emit('goRun');
 }
 
@@ -216,6 +233,13 @@ onUnmounted(() => {
 
 <template>
   <div ref="top" class="bbi-sections">
+    <RangeField v-model="galleryRange.text" :last-floor="lastFloor" note="改完点「刷新列表」。">
+      <template #actions>
+        <button class="bbi-btn bbi-btn-sm" type="button" title="照搬「批量生成」的楼层范围并刷新列表" @click="syncRange">
+          同步批量
+        </button>
+      </template>
+    </RangeField>
     <div class="bbi-gtools">
       <BbiSelect v-model="prefs.filter" :options="FILTERS" class="bbi-gfilter" />
       <button class="bbi-btn bbi-btn-sm" type="button" :disabled="loading" @click="load">刷新列表</button>
@@ -286,6 +310,7 @@ onUnmounted(() => {
           :chat-id="chatId"
           :size="prefs.size"
           :tick="tick"
+          @open="entry => openImage(slot, entry)"
         />
         <p v-if="!pageSlots.length && !loading && !error" class="bbi-field-hint bbi-gempty">
           这个范围里没有卡片。先在上面填楼层范围，再点「刷新列表」。

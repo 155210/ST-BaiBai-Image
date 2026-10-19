@@ -2,6 +2,7 @@
 import { nextTick, onMounted, ref, watch } from 'vue';
 
 import { jumpToFloor } from '@/batch/gallery';
+import { batchState } from '@/batch/controller';
 import { setRangeFrom } from '@/batch/rangeStore';
 
 /**
@@ -36,8 +37,13 @@ function toggle(): void {
 }
 
 function setRange(floor: number): void {
-  const text = setRangeFrom(floor);
-  toastr.success(`楼层范围已设为 ${text}`, '柏宝绘');
+  const result = setRangeFrom(floor, batchState.running !== null);
+  toastr.success(
+    result.batch
+      ? `批量生成和图片浏览的楼层范围都设为 ${result.text}`
+      : `图片浏览的楼层范围已设为 ${result.text}（批量正在跑，批量生成的范围没改）`,
+    '柏宝绘',
+  );
 }
 </script>
 

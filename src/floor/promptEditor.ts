@@ -263,9 +263,9 @@ export function openPromptEditor(options: PromptEditorOptions): void {
    * runner 自己会落盘并 force 出图,所以这里只负责收尾后把新提示词读回来、重绘。
    * 弹窗**不自动关**——点一下就闪退像是崩了。
    */
-  const startRewrite = (): void => {
+  const startRewrite = (hint = ''): void => {
     if (busy || closing || isTagPlanning(planKey)) return;
-    const task = runTagPlan(planKey, () => requestSlotTag(options.at.messageId, options.at.seq));
+    const task = runTagPlan(planKey, () => requestSlotTag(options.at.messageId, options.at.seq, hint));
     paint();
     void task
       .catch(() => {
@@ -284,10 +284,10 @@ export function openPromptEditor(options: PromptEditorOptions): void {
    * (不顶掉更糟——用户接着点「应用」会拿旧草稿把刚重写的覆盖回去)。手打了半天被一次
    * 点击无声吞掉是丢数据,口径同 requestClose;共用 asking 挡住叠出好几个确认框。
    */
-  const rewrite = (): void => {
+  const rewrite = (hint = ''): void => {
     if (busy || asking || closing || isTagPlanning(planKey)) return;
     if (!dirty) {
-      startRewrite();
+      startRewrite(hint);
       return;
     }
     asking = true;
@@ -297,7 +297,7 @@ export function openPromptEditor(options: PromptEditorOptions): void {
       confirmText: '重写',
     }).then(ok => {
       asking = false;
-      if (ok) startRewrite();
+      if (ok) startRewrite(hint);
     });
   };
 

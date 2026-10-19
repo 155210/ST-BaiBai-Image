@@ -3,16 +3,16 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import Collapsible from '@/components/Collapsible.vue';
 import { batchState, refreshBatchJobs } from '@/batch/controller';
-import { parseFloorRange } from '@/batch/range';
 import { batchRange } from '@/batch/rangeStore';
 import { getContext } from '@/st/context';
 import StreamView from '@/stream/StreamView.vue';
 import BatchSection from './BatchSection.vue';
+import RangeField from './RangeField.vue';
 import GalleryTab from './GalleryTab.vue';
 import SearchTab from './SearchTab.vue';
 
 /**
- * 批量页:三个标签共用一个楼层范围。
+ * 批量页:三个标签。批量生成和图片浏览各有自己的楼层范围(批量跑着时照样能翻图),角色搜索搜整个聊天。
  * - 批量生成:批量写生图 tag、批量出图(BatchSection,同一时间只跑一种);
  * - 图片浏览:按范围翻看每个 tag 的图,重roll / 编辑提示词 / 定位(GalleryTab);
  * - 角色搜索:名字在哪些楼出现过(SearchTab)。
@@ -58,25 +58,12 @@ const lastFloor = computed(() => {
   return (getContext()?.chat?.length ?? 0) - 1;
 });
 
-const rangeInfo = computed(() => {
-  try {
-    const floors = parseFloorRange(batchRange.text, lastFloor.value);
-    return { text: `范围内 ${floors.length} 楼，最后一楼是 ${lastFloor.value}。`, error: false };
-  } catch (error) {
-    return { text: error instanceof Error ? error.message : String(error), error: true };
-  }
-});
-
 const stepModel = computed({
   get: () => batchRange.step,
   set: value => {
     batchRange.step = Math.max(1, Math.min(100, Math.floor(Number(value)) || 1));
   },
 });
-
-function selectAll(): void {
-  batchRange.text = '';
-}
 
 onMounted(() => {
   refreshBatchJobs();
@@ -112,27 +99,13 @@ onUnmounted(() => {
       </button>
     </div>
 
-    <div class="bbi-field bbi-batch-range">
-      <span class="bbi-field-label">楼层范围</span>
-      <div class="bbi-batch-range-row">
-        <input
-          v-model="batchRange.text"
-          class="bbi-input"
-          type="text"
-          inputmode="text"
-          placeholder="留空 = 整个聊天；例：0-500, 800-"
-          :disabled="batchState.running !== null"
-        />
-        <button class="bbi-btn bbi-btn-sm" type="button" :disabled="batchState.running !== null" @click="selectAll">
-          全部
-        </button>
-      </div>
-      <p class="bbi-field-hint" :class="{ 'bbi-batch-error': rangeInfo.error }">
-        {{ rangeInfo.text }}楼号就是酒馆里显示的楼号。
-      </p>
-    </div>
-
     <div v-show="tab === 'run'" class="bbi-sections">
+      <RangeField
+        v-model="batchRange.text"
+        :last-floor="lastFloor"
+        :disabled="batchState.running !== null"
+        :note="batchState.running !== null ? '正在跑，跑完才能改。图片浏览有自己的范围，可以照常改。' : ''"
+      />
       <p class="bbi-page-intro">
         不需要把楼显示在页面上，几千楼的聊天也不会卡。跑的时候请让酒馆页面留在前台：切到后台会自动暂停，回来接着跑；
         手机杀了后台再打开，点「继续」就行。同一时间只跑一种。
@@ -165,7 +138,7 @@ onUnmounted(() => {
       </Collapsible>
     </div>
 
-    <GalleryTab v-if="tab === 'gallery'" :chat-tick="chatTick" @go-run="tab = 'run'" />
+    <GalleryTab v-if="tab === 'gallery'" :chat-tick="chatTick" :last-floor="lastFloor" @go-run="tab = 'run'" />
     <SearchTab v-show="tab === 'search'" :chat-tick="chatTick" />
   </section>
 </template>
@@ -180,21 +153,6 @@ onUnmounted(() => {
   flex: 1 1 0;
   justify-content: center;
   padding: 8px 4px;
-}
-.bbi-batch-range {
-  margin-bottom: 16px;
-}
-.bbi-batch-range-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-.bbi-batch-range-row .bbi-input {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.bbi-batch-error {
-  color: var(--bbi-danger);
 }
 .bbi-batch-log {
   list-style: none;

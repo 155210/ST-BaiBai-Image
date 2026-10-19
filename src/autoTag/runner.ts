@@ -10,6 +10,7 @@ import { beginGeneration, clearGeneration, consumeGeneration } from '@/autoTag/g
 import { autoTagProfile, buildAutoTagMessages } from '@/autoTag/prompt';
 import { rebaseImagePositions, type RebaseReport } from '@/autoTag/rebase';
 import { buildSlotTaskNote } from '@/autoTag/slotPlan';
+import { withRewriteHint } from '@/rewriteHint/hint';
 import {
   BBI_CHAR_EXTRA_KEY,
   CHAR_TAG_FIELDS,
@@ -24,6 +25,7 @@ import {
   type CharTagAutoOp,
   type CharTagField,
 } from '@/state/charTags';
+import { assembleHeavyMessages, heavyPresetUsable } from '@/autoTag/heavyPreset';
 import { injectImageTags, parseImagePlan, type ImagePlan } from '@/autoTag/protocol';
 import {
   clearAutoGenerateForFloor,
@@ -110,7 +112,7 @@ interface RunOptions {
    * slotPlan.buildSlotTaskNote。分析基底同样剔除全部旧 tag,但强制输出恰好 1 张,
    * 且忽略本次 AI 的 changes(首次全量分析已为整楼建过档)。
    */
-  slot?: { seq: number };
+  slot?: { seq: number; /** fork:用户写的重写要求,见 rewriteHint/。 */ hint?: string };
   /**
    * 批量调用:不弹逐楼 toast(结果走返回值,由调用方汇总),也不挂自动出图标记——
    * 批量写的楼大多不在页面上,标记会一直挂到用户翻到那楼才突然出图。
@@ -332,7 +334,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
       memory,
       preparedTarget,
       anchors.text,
-      slot ? buildSlotTaskNote(rawSource, slot.seq) : '',
+      slot ? withRewriteHint(buildSlotTaskNote(rawSource, slot.seq), slot.hint) : '',
       profile,
     );
     const channel = getTagGenChannel();
@@ -343,16 +345,30 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
     const retries = Math.max(0, Math.floor(Number(settings.autoTag.retryCount) || 0));
     let plan: ImagePlan | null = null;
     let lastError = '';
+    // 重型自定义提示词:默认提示词返回解析/校验不过之后,剩下的重试改用导入的酒馆预设
+    // (请求异常照旧用当前这套重试)。开跑时快照一份,下一楼重新从默认开始。
+    const heavy = heavyPresetUsable(settings.autoTag.heavyPreset)
+      ? assembleHeavyMessages(
+          settings.autoTag.heavyPreset.entries,
+          messages,
+          typeof context.substituteParams === 'function' ? context.substituteParams.bind(context) : undefined,
+          settings.autoTag.heavyPreset.squash,
+        )
+      : null;
+    let useHeavy = false;
     for (let attempt = 0; attempt <= retries && !plan; attempt++) {
       if (controller.signal.aborted) {
         processed.delete(identity);
         return { kind: 'aborted' };
       }
+      // 本次失败是否出在解析/校验(而非请求本身);对象壳理由同下面的 parsed
+      const check = { parseFailed: false };
       try {
         // parsed 用对象壳装着:validate 闭包写入,await 之后读取——请求成功 + 验收通过才非空。
         // (直接 let 会被 TS 收窄成 null:闭包内的赋值控制流分析看不见。)
         const parsed: { plan: ImagePlan | null } = { plan: null };
         const validate = (raw: string) => {
+          check.parseFailed = true;
           const candidate = parseImagePlan(
             raw,
             preparedTarget.segments,
@@ -370,22 +386,26 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
             throw new Error('NAI 4.5/V5 建档必须附带 nl 外貌描述');
           }
           parsed.plan = candidate;
+          check.parseFailed = false;
         };
+        const attemptHeavy = useHeavy && !!heavy;
+        const attemptMessages = attemptHeavy ? heavy : messages;
         // 有重试时给 source 带上第几次,历史里两条记录一眼看出是重试关系
+        const tier = attemptHeavy ? ' · 重型预设' : '';
         const source = slot
-          ? `重写提示词(第 ${floor} 楼 · 第 ${slot.seq + 1} 张${retries > 0 ? ` · 第 ${attempt + 1} 次` : ''})`
+          ? `重写提示词(第 ${floor} 楼 · 第 ${slot.seq + 1} 张${retries > 0 ? ` · 第 ${attempt + 1} 次` : ''}${tier})`
           : retries > 0
-            ? `自动 tag(第 ${floor} 楼 · 第 ${attempt + 1} 次)`
+            ? `自动 tag(第 ${floor} 楼 · 第 ${attempt + 1} 次${tier})`
             : `自动 tag(第 ${floor} 楼)`;
         if (channel) {
-          await requestCompletion(channel, messages, {
+          await requestCompletion(channel, attemptMessages, {
             signal: controller.signal,
             source,
             validate,
             floor, // fork:流式时楼层上的实时折叠区
           });
         } else {
-          await requestViaMainApi(messages, {
+          await requestViaMainApi(attemptMessages, {
             signal: controller.signal,
             source,
             validate,
@@ -402,6 +422,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
           return { kind: 'aborted' };
         }
         lastError = error instanceof Error ? error.message : String(error);
+        if (check.parseFailed) useHeavy = true;
         console.warn(`[柏宝绘] 第 ${floor} 楼第 ${attempt + 1}/${retries + 1} 次生成 tag 失败`, error);
       }
     }
@@ -648,8 +669,8 @@ export async function requestFloorTags(
  * 分析基底剔除全部旧 tag(AI 不该把 tag 当正文),强制输出 1 张;本楼其它 tag 与图片
  * 一字不动,旧图留在该槽位历史里。本次 AI 输出的 changes 一律忽略(首次全量分析时已建档)。
  */
-export async function requestSlotTag(floor: number, seq: number): Promise<void> {
-  await runForFloor(floor, { manual: true, slot: { seq } });
+export async function requestSlotTag(floor: number, seq: number, hint = ''): Promise<void> {
+  await runForFloor(floor, { manual: true, slot: { seq, hint } });
 }
 
 /** 中止某楼在途的 tag 请求(全量分析与单槽重写共用同一把「每楼一把」的锁)。 */

@@ -50,6 +50,18 @@ function log(line: string): void {
   if (batchState.log.length > 80) batchState.log.length = 80;
 }
 
+/** 批量页上填的「每楼间隔」(秒,记在浏览器本地);写 tag 默认 2 秒、出图默认 3 秒。 */
+export function savedGapMs(kind: BatchKind): number {
+  let seconds = kind === 'tag' ? 2 : 3;
+  try {
+    const raw = localStorage.getItem(`bbi_batch_${kind}_gap_seconds`);
+    if (raw !== null && raw !== '') seconds = Number(raw) || 0;
+  } catch {
+    /* 读不到就用默认 */
+  }
+  return Math.round(Math.min(60, Math.max(0, seconds)) * 1000);
+}
+
 function currentChatId(): string {
   return getContext()?.getCurrentChatId?.() ?? '';
 }
@@ -209,6 +221,23 @@ async function run(job: BatchJob, gapMs: number): Promise<void> {
     notifyDone(`${LABEL[kind]}跑完了`, `${done}，失败 ${job.fails.length} 楼`);
   }
   await verify(job);
+  chainImages(job);
+}
+
+/** 「写完 tag 接着出图」:写 tag 跑完后,给这次写入了 tag 的楼开一个出图任务。 */
+function chainImages(job: BatchJob): void {
+  if (job.kind !== 'tag' || !job.thenImages || job.status !== 'done') return;
+  if (currentChatId() !== job.chatId || batchState.running) return;
+  const floors = [...new Set(job.touched)].sort((a, b) => a - b).filter(floor => needsImage(floor));
+  if (!floors.length) return;
+  const blocker = batchBlocker('image');
+  if (blocker) {
+    log(`没能接着出图：${blocker}`);
+    toastr.warning(`tag 写完了，但没能接着出图：${blocker}`, '柏宝绘');
+    return;
+  }
+  log(`接着出图：${floors.length} 楼`);
+  startBatch('image', floors, savedGapMs('image'));
 }
 
 async function verify(job: BatchJob): Promise<void> {
@@ -236,10 +265,18 @@ async function verify(job: BatchJob): Promise<void> {
   }
 }
 
-/** 按楼号开一个新任务(会覆盖本聊天同种类的旧记录)。mode 只对出图有用。 */
-export function startBatch(kind: BatchKind, floors: number[], gapMs: number, mode: ImageMode = 'all'): void {
+export interface StartOptions {
+  /** 出图:挑哪些槽位。 */
+  mode?: ImageMode;
+  /** 写 tag:跑完后接着出图。 */
+  thenImages?: boolean;
+}
+
+/** 按楼号开一个新任务(会覆盖本聊天同种类的旧记录)。 */
+export function startBatch(kind: BatchKind, floors: number[], gapMs: number, options: StartOptions = {}): void {
   if (batchBlocker(kind)) return;
-  const job = createJob(kind, currentChatId(), floors, mode);
+  const job = createJob(kind, currentChatId(), floors, options.mode ?? 'all');
+  if (kind === 'tag' && options.thenImages) job.thenImages = true;
   saveJob(job);
   log(`${LABEL[kind]}开始：共 ${floors.length} 楼`);
   void run(job, gapMs);
@@ -265,6 +302,7 @@ export function retryFailed(kind: BatchKind, gapMs: number): void {
     old.fails.map(item => item.floor).sort((a, b) => a - b),
     old.mode ?? 'all',
   );
+  if (old.thenImages) job.thenImages = true;
   saveJob(job);
   log(`${LABEL[kind]}：重试失败的 ${job.floors.length} 楼`);
   void run(job, gapMs);

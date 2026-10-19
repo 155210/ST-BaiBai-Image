@@ -5,6 +5,7 @@ import Collapsible from '@/components/Collapsible.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import Icon from '@/components/Icon.vue';
 import ModalMask from '@/components/ModalMask.vue';
+import HeavyPresetPanel from '@/pages/settings/HeavyPresetPanel.vue';
 import { fetchModels, testChannel } from '@/api/client';
 import {
   BACKENDS,
@@ -33,6 +34,7 @@ import {
 } from '@/state/ui';
 import { checkForUpdate, performUpdate, updateState } from '@/update';
 import { computed, nextTick, onMounted, ref } from 'vue';
+import BackupSection from './BackupSection.vue';
 
 const NAV_OPTIONS: { value: NavPosition; label: string }[] = [
   { value: 'auto', label: '自动' },
@@ -865,6 +867,12 @@ async function confirmUpdate() {
           </li>
         </ul>
       </Collapsible>
+
+      <Collapsible title="重型自定义提示词" :open="false">
+        <HeavyPresetPanel />
+      </Collapsible>
+
+      <BackupSection />
     </div>
 
     <!-- ===== 排除角色弹窗:搜索 + 勾选列表 ===== -->

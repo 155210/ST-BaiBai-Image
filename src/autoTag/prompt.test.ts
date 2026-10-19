@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { heavyPresetDefaults } from '@/autoTag/heavyPreset';
 import { autoTagProfile, buildAutoTagMessages, expandNlSections } from '@/autoTag/prompt';
 import {
   activeComfyPreset,
@@ -815,6 +816,7 @@ describe('auto tag prompt', () => {
       maxImages: 2,
       retryCount: 1,
       autoGenerate: true,
+      heavyPreset: heavyPresetDefaults(),
       prompts: prompts(),
     };
     const oldBackend = settings.defaultBackend;
@@ -850,6 +852,7 @@ describe('auto tag prompt', () => {
       maxImages: 2,
       retryCount: 1,
       autoGenerate: true,
+      heavyPreset: heavyPresetDefaults(),
       prompts: prompts(),
     };
     const oldBackend = settings.defaultBackend;
@@ -888,6 +891,7 @@ describe('auto tag prompt', () => {
       maxImages: 2,
       retryCount: 1,
       autoGenerate: true,
+      heavyPreset: heavyPresetDefaults(),
       prompts: prompts(),
     };
     const messages = await buildAutoTagMessages(context(), 1, options, null);
@@ -922,6 +926,7 @@ describe('auto tag prompt', () => {
       maxImages: 2,
       retryCount: 1,
       autoGenerate: true,
+      heavyPreset: heavyPresetDefaults(),
       prompts: prompts(),
     };
     const oldBackend = settings.defaultBackend;
@@ -964,6 +969,7 @@ describe('auto tag prompt', () => {
       maxImages: 2,
       retryCount: 1,
       autoGenerate: true,
+      heavyPreset: heavyPresetDefaults(),
       prompts: prompts(),
     };
     const oldBackend = settings.defaultBackend;
@@ -1027,6 +1033,7 @@ describe('NAI「生成自然语言」开关与渠道画幅锁', () => {
       maxImages: 2,
       retryCount: 1,
       autoGenerate: true,
+      heavyPreset: heavyPresetDefaults(),
       prompts: prompts(overrides),
     };
   }

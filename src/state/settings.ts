@@ -17,6 +17,11 @@ import {
   vibeFingerprint,
   vibeMetaFromData,
 } from '@/backends/vibeStore';
+import {
+  heavyPresetDefaults,
+  normalizeHeavyPreset,
+  type HeavyPresetSettings,
+} from '@/autoTag/heavyPreset';
 import { getContext } from '@/st/context';
 import { reactive, watch } from 'vue';
 
@@ -463,6 +468,8 @@ export interface AutoTagSettings {
   autoGenerate: boolean;
   /** 可编辑提示词集(破限/后端规范/思维链);空串 = 回落内置默认。 */
   prompts: AutoTagPrompts;
+  /** 重型自定义提示词(导入的酒馆预设):默认提示词解析失败后,剩余重试改用它(见 autoTag/heavyPreset.ts)。 */
+  heavyPreset: HeavyPresetSettings;
 }
 
 /**
@@ -1204,6 +1211,7 @@ function defaults(): ImageSettings {
         naiThinking: '',
         naiV5Thinking: '',
       },
+      heavyPreset: heavyPresetDefaults(),
     },
     excludes: excludesDefaults(),
     storage: { saveAsJpeg: true },
@@ -1817,6 +1825,7 @@ function normalize(raw: unknown): ImageSettings {
         naiV5Thinking: typeof rp.naiV5Thinking === 'string' ? rp.naiV5Thinking : '',
       };
     })(),
+    heavyPreset: normalizeHeavyPreset(rt.heavyPreset),
   };
   merged.excludes = normalizeExcludes(r.excludes);
   // 存储行为:嵌套对象逐字段兜底(老数据无 storage 键 → 默认关)
@@ -2116,6 +2125,14 @@ export function isCurrentChatExcluded(): boolean {
   if (!settings.excludes.excludedChars.length) return false;
   const name = currentCharName();
   return name !== null && settings.excludes.excludedChars.includes(name);
+}
+
+/**
+ * 用一份外部设置(「导入设置」读进来的)整体替换当前设置。走与启动载入同一个 normalize,
+ * 缺的字段补默认、坏的值纠正;之后由下面的 watch 照常落盘并同步共享渠道/排除名单。
+ */
+export function replaceSettings(raw: unknown): void {
+  applyInto(settings, normalize(raw));
 }
 
 /** 写回 extension_settings 并防抖落盘到服务器(跨设备同步的关键)。 */
