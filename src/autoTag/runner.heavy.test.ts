@@ -88,6 +88,7 @@ beforeEach(() => {
       heavySlotEntry(),
     ],
     squash: false,
+    extras: [],
   };
   stubContext();
 });
@@ -134,7 +135,7 @@ describe('自动 tag 重试分层', () => {
 
     calls.length = 0;
     stubContext();
-    settings.autoTag.heavyPreset = { enabled: true, name: '', entries: [heavySlotEntry()], squash: false };
+    settings.autoTag.heavyPreset = { enabled: true, name: '', entries: [heavySlotEntry()], squash: false, extras: [] };
     expect(settings.autoTag.heavyPreset.entries[0].id).toBe(HEAVY_SLOT_ID);
     await requestFloorTags(1, { quiet: true });
     expect(calls.map(c => c.messages)).toEqual([DEFAULT_CHAIN, DEFAULT_CHAIN]);

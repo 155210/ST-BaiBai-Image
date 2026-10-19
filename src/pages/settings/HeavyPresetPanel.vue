@@ -5,7 +5,12 @@
  *
  * 拖动用 Pointer Events 而非 HTML5 拖放:安卓/iOS 的触摸不会触发 dragstart,
  * 抓手上设 touch-action:none,按住抓手上下滑即可换位。
+ *
+ * 列表与酒馆条目列表一一对应;条目库里有、酒馆列表没放的条目收在底部折叠区
+ * 「没在顺序里的条目」(extras),永不发送,可单条「加入末尾」。
+ * 「多选」模式下行首勾选框改为选择框,可批量删除(两个列表都能选,占位条目除外)。
  */
+import { confirmDialog } from '@/components/confirm';
 import BbiSelect from '@/components/BbiSelect.vue';
 import BbiTextarea from '@/components/BbiTextarea.vue';
 import Icon from '@/components/Icon.vue';
@@ -17,7 +22,7 @@ import {
   type HeavyEntry,
 } from '@/autoTag/heavyPreset';
 import { settings } from '@/state/settings';
-import { computed, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 
 const preset = computed(() => settings.autoTag.heavyPreset);
 const promptCount = computed(() => preset.value.entries.filter(e => e.id !== HEAVY_SLOT_ID).length);
@@ -54,9 +59,12 @@ async function onImport(event: Event): Promise<void> {
       name: file.name.replace(/\.json$/i, ''),
       entries: parsed.entries,
       squash: parsed.squash,
+      extras: parsed.extras,
     };
+    exitSelect();
     const notes = [
       `已导入 ${parsed.promptCount} 个条目(启用 ${parsed.enabledCount})`,
+      parsed.extras.length ? `${parsed.extras.length} 个没在酒馆顺序里的条目收进了底部「没在顺序里的条目」` : '',
       parsed.droppedMarkers ? `丢弃角色卡/世界书等占位 ${parsed.droppedMarkers} 个` : '',
       parsed.hadChatHistory ? '' : '预设里没有聊天记录,柏宝绘提示词放在了末尾',
     ].filter(Boolean);
@@ -66,8 +74,69 @@ async function onImport(event: Event): Promise<void> {
   }
 }
 
-function clearPreset(): void {
+async function clearPreset(): Promise<void> {
+  const ok = await confirmDialog({
+    title: '清空预设',
+    text: '清空后所有条目都会删除,需要时重新导入。',
+    confirmText: '清空',
+    tone: 'danger',
+  });
+  if (!ok) return;
   settings.autoTag.heavyPreset = { ...heavyPresetDefaults(), enabled: preset.value.enabled };
+  exitSelect();
+}
+
+/* —— 没在顺序里的条目 —— */
+const extrasOpen = ref(false);
+function appendExtra(entry: HeavyEntry): void {
+  const extras = preset.value.extras;
+  const index = extras.indexOf(entry);
+  if (index < 0) return;
+  extras.splice(index, 1);
+  preset.value.entries.push({ ...entry, enabled: true });
+}
+
+/* —— 多选删除 —— */
+const selecting = ref(false);
+const selected = reactive(new Set<string>());
+const selectableIds = computed(() => [
+  ...preset.value.entries.filter(e => e.id !== HEAVY_SLOT_ID).map(e => e.id),
+  ...preset.value.extras.map(e => e.id),
+]);
+const allSelected = computed(
+  () => selectableIds.value.length > 0 && selectableIds.value.every(id => selected.has(id)),
+);
+
+function enterSelect(): void {
+  selected.clear();
+  selecting.value = true;
+}
+function exitSelect(): void {
+  selected.clear();
+  selecting.value = false;
+}
+function toggleSelected(id: string): void {
+  if (id === HEAVY_SLOT_ID) return;
+  if (selected.has(id)) selected.delete(id);
+  else selected.add(id);
+}
+function toggleSelectAll(): void {
+  if (allSelected.value) selected.clear();
+  else for (const id of selectableIds.value) selected.add(id);
+}
+async function deleteSelected(): Promise<void> {
+  if (!selected.size) return;
+  const ok = await confirmDialog({
+    title: '删除条目',
+    text: `删除选中的 ${selected.size} 个条目?删除后需要重新导入预设才能找回。`,
+    confirmText: '删除',
+    tone: 'danger',
+  });
+  if (!ok) return;
+  const p = preset.value;
+  p.entries = p.entries.filter(e => e.id === HEAVY_SLOT_ID || !selected.has(e.id));
+  p.extras = p.extras.filter(e => !selected.has(e.id));
+  exitSelect();
 }
 
 /* —— 拖动排序 —— */
@@ -75,7 +144,7 @@ const listEl = ref<HTMLElement | null>(null);
 const dragId = ref<string | null>(null);
 
 function onHandleDown(event: PointerEvent, id: string): void {
-  if (event.button !== 0) return;
+  if (event.button !== 0 || selecting.value) return;
   event.preventDefault();
   dragId.value = id;
   (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
@@ -135,9 +204,10 @@ function saveEdit(): void {
 function removeEditing(): void {
   const entry = editing.value;
   if (!entry || entry.id === HEAVY_SLOT_ID) return;
-  const entries = preset.value.entries;
-  const index = entries.indexOf(entry);
-  if (index >= 0) entries.splice(index, 1);
+  for (const list of [preset.value.entries, preset.value.extras]) {
+    const index = list.indexOf(entry);
+    if (index >= 0) list.splice(index, 1);
+  }
   closeEdit();
 }
 
@@ -193,6 +263,7 @@ function addEntry(): void {
         'is-slot': entry.id === HEAVY_SLOT_ID,
         'is-off': entry.id !== HEAVY_SLOT_ID && !entry.enabled,
         'is-dragging': dragId === entry.id,
+        'is-picked': selected.has(entry.id),
       }"
     >
       <span
@@ -205,15 +276,27 @@ function addEntry(): void {
       >
         <Icon name="text" />
       </span>
+      <span v-if="entry.id === HEAVY_SLOT_ID" class="bbi-heavy-slot-mark"><Icon name="pin" /></span>
       <input
-        v-if="entry.id !== HEAVY_SLOT_ID"
+        v-else-if="selecting"
+        type="checkbox"
+        class="bbi-checkbox bbi-heavy-pick"
+        :checked="selected.has(entry.id)"
+        title="选择此条目"
+        @change="toggleSelected(entry.id)"
+      />
+      <input
+        v-else
         v-model="entry.enabled"
         type="checkbox"
         class="bbi-checkbox"
         :title="entry.enabled ? '关闭此条目' : '启用此条目'"
       />
-      <span v-else class="bbi-heavy-slot-mark"><Icon name="pin" /></span>
-      <button class="bbi-heavy-open" type="button" @click="entry.id !== HEAVY_SLOT_ID && openEdit(entry)">
+      <button
+        class="bbi-heavy-open"
+        type="button"
+        @click="entry.id !== HEAVY_SLOT_ID && (selecting ? toggleSelected(entry.id) : openEdit(entry))"
+      >
         <span class="bbi-heavy-name">{{ entry.name }}</span>
         <span v-if="entry.id !== HEAVY_SLOT_ID" class="bbi-heavy-tag">{{ ROLE_LABEL[entry.role] }}</span>
         <span
@@ -226,8 +309,71 @@ function addEntry(): void {
     </li>
   </ul>
 
-  <div class="bbi-heavy-actions">
+  <!-- 没在顺序里的条目:酒馆条目库里有、条目列表没放,酒馆里看不到也不发送 -->
+  <section v-if="preset.extras.length" class="bbi-heavy-extras" :class="{ 'is-open': extrasOpen }">
+    <button class="bbi-heavy-extras-head" type="button" :aria-expanded="extrasOpen" @click="extrasOpen = !extrasOpen">
+      <span class="bbi-field-label">没在顺序里的条目({{ preset.extras.length }})</span>
+      <Icon name="chevron" class="bbi-heavy-chevron" />
+    </button>
+    <template v-if="extrasOpen">
+      <p class="bbi-field-hint">
+        这些条目在预设的条目库里,但酒馆的条目列表没放它们,所以酒馆里看不到、也不会发送。这里同样不发送,需要的点「加入末尾」。
+      </p>
+      <ul class="bbi-heavy-list">
+        <li
+          v-for="entry in preset.extras"
+          :key="entry.id"
+          class="bbi-heavy-row is-off"
+          :class="{ 'is-picked': selected.has(entry.id) }"
+        >
+          <input
+            v-if="selecting"
+            type="checkbox"
+            class="bbi-checkbox bbi-heavy-pick"
+            :checked="selected.has(entry.id)"
+            title="选择此条目"
+            @change="toggleSelected(entry.id)"
+          />
+          <button
+            class="bbi-heavy-open"
+            type="button"
+            @click="selecting ? toggleSelected(entry.id) : openEdit(entry)"
+          >
+            <span class="bbi-heavy-name">{{ entry.name }}</span>
+            <span class="bbi-heavy-tag">{{ ROLE_LABEL[entry.role] }}</span>
+          </button>
+          <button
+            v-if="!selecting"
+            class="bbi-btn bbi-btn-sm"
+            type="button"
+            @click="appendExtra(entry)"
+          >
+            <Icon name="plus" /> 加入末尾
+          </button>
+        </li>
+      </ul>
+    </template>
+  </section>
+
+  <div v-if="selecting" class="bbi-heavy-actions">
+    <button class="bbi-btn bbi-btn-sm" type="button" @click="toggleSelectAll">
+      <Icon name="checklist" /> {{ allSelected ? '全不选' : '全选' }}
+    </button>
+    <button
+      class="bbi-btn bbi-btn-danger bbi-btn-sm"
+      type="button"
+      :disabled="!selected.size"
+      @click="deleteSelected"
+    >
+      <Icon name="trash" /> 删除选中({{ selected.size }})
+    </button>
+    <button class="bbi-btn bbi-btn-sm" type="button" @click="exitSelect">完成</button>
+  </div>
+  <div v-else class="bbi-heavy-actions">
     <button class="bbi-btn bbi-btn-sm" type="button" @click="addEntry"><Icon name="plus" /> 新建条目</button>
+    <button v-if="selectableIds.length" class="bbi-btn bbi-btn-sm" type="button" @click="enterSelect">
+      <Icon name="checklist" /> 多选删除
+    </button>
     <button v-if="promptCount" class="bbi-btn bbi-btn-danger bbi-btn-sm" type="button" @click="clearPreset">
       <Icon name="trash" /> 清空预设
     </button>
@@ -384,6 +530,38 @@ function addEntry(): void {
 .bbi-heavy-tag.is-depth {
   color: var(--bbi-accent);
   border-color: var(--bbi-accent);
+}
+.bbi-heavy-row.is-picked {
+  border-color: var(--bbi-danger);
+}
+/* 多选时整行可点:关掉的条目也别褪色,选中状态才看得清 */
+.bbi-heavy-row.is-picked .bbi-heavy-open {
+  opacity: 1;
+}
+.bbi-heavy-pick {
+  margin-left: 4px;
+}
+.bbi-heavy-extras {
+  margin: 0 0 10px;
+  border-top: 1px solid var(--bbi-line);
+}
+.bbi-heavy-extras-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+.bbi-heavy-chevron {
+  transition: transform 0.2s;
+}
+.bbi-heavy-extras.is-open .bbi-heavy-chevron {
+  transform: rotate(180deg);
 }
 .bbi-heavy-actions {
   display: flex;
