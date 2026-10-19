@@ -50,6 +50,15 @@
 | src/autoTag/runner.ts | const attemptMessages = attemptHeavy ? heavy : messages; | 解析失败后剩余重试改发酒馆预设拼装的消息链 | #7 |
 | src/pages/settings/index.vue | <HeavyPresetPanel /> | 设置页挂「重型自定义提示词」面板 | #7 |
 | src/autoTag/prompt.test.ts | heavyPreset: heavyPresetDefaults(), | 测试夹具补新字段 | #7 |
+| src/api/client.ts | import { beginStream } from '@/stream/live' | 流式实时输出 | #8 |
+| src/api/client.ts | import { withIdleTimeout } from '@/stream/idle' | 流式按多少秒没有新内容计超时 | #8 |
+| src/api/client.ts | floor?: number; | 请求带上楼层，楼层实时折叠区定位用 | #8 |
+| src/api/client.ts | 只有真出了字才算「有新内容」 | readSseContent 回调片段；末尾无换行的行也解析 | #8 |
+| src/autoTag/runner.ts | floor, // fork:流式时楼层上的实时折叠区 | 写 tag 请求带楼层 | #8 |
+| src/index.ts | bindFloorStreamPanels(); // fork:楼层上的流式实时折叠区 | 绑定楼层实时折叠区 | #8 |
+| src/floor/PromptEditor.vue | <StreamView v-if="rewriting" /> | 重写时看实时输出 | #8 |
+| src/pages/batch/index.vue | <StreamView /> | 批量页实时输出 | #8 |
+| src/pages/settings/index.vue | 开了之后，正在写 tag 的楼层下面 | 流式说明 | #8 |
 
 ## 其他本分支改动（不在原作者文件里，或合并时一定会冲突、手动处理）
 
@@ -66,6 +75,7 @@
 - `src/lightboxNav/`、`src/batch/galleryLightbox.ts`、`src/pages/batch/EmptySlotView.vue`：图片浏览大图左右切换
 - `src/rewriteHint/`：AI 重写提示词时可以写额外要求
 - `src/autoTag/heavyPreset.ts`、`src/pages/settings/HeavyPresetPanel.vue`：解析失败时改用酒馆预设（重型自定义提示词）
+- `src/stream/`：副 API 流式实时输出、无响应超时
 - `src/fork.guard.test.ts`、本文件
 
 ## 合并原作者更新的步骤

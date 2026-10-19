@@ -5,6 +5,7 @@ import Collapsible from '@/components/Collapsible.vue';
 import { batchState, refreshBatchJobs } from '@/batch/controller';
 import { batchRange } from '@/batch/rangeStore';
 import { getContext } from '@/st/context';
+import StreamView from '@/stream/StreamView.vue';
 import BatchSection from './BatchSection.vue';
 import RangeField from './RangeField.vue';
 import GalleryTab from './GalleryTab.vue';
@@ -127,6 +128,8 @@ onUnmounted(() => {
 
       <BatchSection kind="tag" :chat-tick="chatTick" />
       <BatchSection kind="image" :chat-tick="chatTick" />
+
+      <StreamView />
 
       <Collapsible v-if="batchState.log.length" title="运行日志" :open="false">
         <ul class="bbi-batch-log">

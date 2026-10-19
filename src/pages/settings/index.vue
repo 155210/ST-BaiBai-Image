@@ -1055,6 +1055,8 @@ async function confirmUpdate() {
           <span class="bbi-modal-label">流式传输</span>
           <input v-model="editingChannel.stream" type="checkbox" class="bbi-checkbox" />
         </label>
+        <!-- fork:流式说明 -->
+        <span class="bbi-field-hint">开了之后，正在写 tag 的楼层下面、批量页、AI 重写时都能点开看「实时输出」（默认收起，收起时不占手机性能）；超时按多少秒没有新内容算，写得慢但一直在写不会被掐断。</span>
         <label class="bbi-modal-field">
           <span class="bbi-modal-label">排除参数</span>
           <input

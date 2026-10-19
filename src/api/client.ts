@@ -1,5 +1,7 @@
 import { getContext } from '@/st/context';
 import type { ApiChannel } from '@/state/settings';
+import { beginStream } from '@/stream/live';
+import { withIdleTimeout } from '@/stream/idle';
 import {
   beginLlm,
   failLlm,
@@ -68,6 +70,8 @@ export interface RequestOptions {
    * 由调用方决定重试/放弃。
    */
   validate?: (content: string) => void;
+  /** fork:这次请求是给哪一楼写的,流式时楼层上的实时折叠区靠它找到位置。 */
+  floor?: number;
 }
 
 /* ============ 请求历史埋点(纯辅助,绝不允许影响主流程) ============ */
@@ -265,8 +269,14 @@ async function requestCompletionAtUrl(
     }),
   );
 
+  // fork:流式按「多少秒没有新内容」算超时(stream/idle.ts),非流式仍按总时长
+  const run = <T,>(task: (signal: AbortSignal, touch: () => void) => Promise<T>): Promise<T> =>
+    stream
+      ? withIdleTimeout(timeoutSec, opts.signal, msg => new ApiError(msg), '副 API 请求', task)
+      : withTimeout(timeoutSec, opts.signal, '副 API 请求', signal => task(signal, () => {}));
+
   try {
-    const result = await withTimeout(timeoutSec, opts.signal, '副 API 请求', async signal => {
+    const result = await run(async (signal, touch) => {
       const resp = await fetch(GENERATE_URL, {
         method: 'POST',
         headers: ctx.getRequestHeaders(),
@@ -281,7 +291,22 @@ async function requestCompletionAtUrl(
 
       // 流式:按 SSE 增量拼接;非流式:直接解析 JSON。
       if (stream) {
-        const streamed = await readSseContent(resp);
+        // fork:实时输出面板(src/stream/live.ts)
+        const tap = beginStream(opts.source || '未标注', {
+          chatId: ctx.getCurrentChatId?.() ?? '',
+          floor: opts.floor,
+        });
+        let streamed = '';
+        try {
+          streamed = await readSseContent(resp, piece => {
+            touch();
+            tap.push(piece);
+          });
+        } catch (e) {
+          tap.end(e instanceof DOMException && e.name === 'AbortError' ? '已中断' : e instanceof Error ? e.message : String(e));
+          throw e;
+        }
+        tap.end(streamed ? '' : '返回空内容');
         if (!streamed) throw new ApiError('副 API 返回空内容');
         // 流式无 usage:ST 构造上游请求体是字段白名单,不含 stream_options,
         // 没法让上游在末尾回 usage chunk。只能事后本地估算。
@@ -331,7 +356,7 @@ async function requestCompletionAtUrl(
  * 推理模型的思维链增量(delta.reasoning 等)单独缓冲:只有 content 全空时才回退用它,
  * 避免在 content 正常时把思维链混进正文。
  */
-export async function readSseContent(resp: Response): Promise<string> {
+export async function readSseContent(resp: Response, onChunk?: (piece: string) => void): Promise<string> {
   const reader = resp.body?.getReader();
   if (!reader) {
     // 无法流式读取(理论上不会):退回当作整体 JSON 处理
@@ -349,6 +374,15 @@ export async function readSseContent(resp: Response): Promise<string> {
     // 按行解析,保留最后一段不完整的行到下次
     const lines = buf.split('\n');
     buf = lines.pop() ?? '';
+    emit(lines);
+  }
+  // fork:流末尾没有换行的最后一行也要解析(有的代理不补结尾换行)
+  buf += decoder.decode();
+  emit([buf]);
+  return out.trim() || reasoningOut.trim();
+
+  function emit(lines: string[]): void {
+    let chunkText = '';
     for (const line of lines) {
       const t = line.trim();
       if (!t || !t.startsWith('data:')) continue;
@@ -364,13 +398,15 @@ export async function readSseContent(resp: Response): Promise<string> {
         const reasoningPiece =
           textOf(src?.reasoning) || textOf(src?.reasoning_content) || textOf(src?.thinking);
         if (reasoningPiece) reasoningOut += reasoningPiece;
+        chunkText += reasoningPiece + piece;
       } catch (e) {
         if (e instanceof ApiError) throw e;
         // 单行解析失败忽略(可能是注释行/心跳)
       }
     }
+    // fork:只有真出了字才算「有新内容」;心跳/注释行/空 delta 不给无响应计时续命
+    if (chunkText) onChunk?.(chunkText);
   }
-  return out.trim() || reasoningOut.trim();
 }
 
 /** 把可能是 string / content-parts 数组 / 其他类型的值转成文本;非字符串成分一律丢弃。 */

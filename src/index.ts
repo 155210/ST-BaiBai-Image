@@ -1,6 +1,7 @@
 import App from '@/App.vue';
 import { bindAutoTagging } from '@/autoTag/runner';
 import { bindTagActionButtons } from '@/floor/actionButton';
+import { bindFloorStreamPanels } from '@/stream/floorPanel';
 import { bindFloorHydration } from '@/floor/hydrate';
 import { injectMenuButton } from '@/menu';
 import { registerPublicInterface } from '@/public/register';
@@ -103,6 +104,7 @@ async function hydrateWhenReady(attempt = 0) {
       bindAutoTagging();
       bindFloorHydration();
       bindTagActionButtons();
+      bindFloorStreamPanels(); // fork:楼层上的流式实时折叠区
       // 公开接口必须排在 hydrateSettings 之后:设置回灌前 getBackendStatus() 读的是
       // 默认值,会把配好的用户报成「未配置」。排在 bindCharTagSync 之后则是为了让
       // ready 事件里的 revision 已经对应真实角色库。
