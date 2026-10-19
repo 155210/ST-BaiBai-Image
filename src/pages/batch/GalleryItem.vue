@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 
 import {
+  busyLabel,
   deleteSlotImage,
   jumpToFloor,
   readSlot,
@@ -77,12 +78,7 @@ const badge = computed(() => {
   return parts.join(' · ');
 });
 
-const busyText = computed(() => {
-  const running = record.value;
-  if (!running) return '';
-  if (running.retry) return `受限，等第 ${running.retry.attempt}/${running.retry.max} 次重试`;
-  return running.phase === 'queued' ? '排队中…' : '生成中…';
-});
+const busyText = computed(() => busyLabel(record.value));
 
 function openImage(): void {
   const entry = shown.value;
@@ -233,6 +229,8 @@ function onImageError(): void {
 .bbi-gitem-busy {
   position: absolute;
   inset: 0;
+  /* 生成中也能点图看大图(大图左上会显示进度);只有「取消」接点击 */
+  pointer-events: none;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -243,6 +241,7 @@ function onImageError(): void {
   font-size: 12px;
 }
 .bbi-gitem-busy button {
+  pointer-events: auto;
   padding: 3px 12px;
   border: 1px solid oklch(1 0 0 / 0.6);
   border-radius: var(--bbi-radius-pill);
