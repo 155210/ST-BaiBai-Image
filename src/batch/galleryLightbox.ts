@@ -127,6 +127,22 @@ function openEmpty(options: GalleryLightboxOptions, view: SlotView, nav: Lightbo
   else refresh();
 }
 
+/** 有弹窗(编辑提示词、删除确认)开着。 */
+function modalOpen(): boolean {
+  return !!document.getElementById(HOST_ID)?.shadowRoot?.querySelector('.bbi-modal-mask');
+}
+
+/**
+ * 作者的灯箱 z-index 是 10050,比所有弹窗(10001 / 10002)都高,在大图上点删除或编辑时
+ * 确认框和编辑框会被压在下面。图片浏览的大图降到 10001:仍盖住插件窗口(10000),
+ * 后开的弹窗插在它后面、同级或更高,就能盖在大图上面。
+ */
+function lowerLightbox(): void {
+  const all = document.getElementById(HOST_ID)?.shadowRoot?.querySelectorAll<HTMLElement>('.bbi-lightbox');
+  const last = all?.[all.length - 1];
+  if (last) last.style.zIndex = '10001';
+}
+
 /* ---------- 入口 ---------- */
 
 export function openGalleryLightbox(options: GalleryLightboxOptions): void {
@@ -166,16 +182,13 @@ export function openGalleryLightbox(options: GalleryLightboxOptions): void {
   };
   // 大图上的「编辑」:和卡片上的 ✎ 同一个弹窗;「应用并重绘」回到大图看进度,出完换新图
   nav.edit = () => {
-    closeLightbox();
     openPromptEditor({
       at: { chatId: context.getCurrentChatId?.() ?? '', messageId: view.floor, swipeId: view.swipeId, seq: view.seq, rawTag: view.tag },
       content: { ...view.content, characters: view.content.characters.map(character => ({ ...character })) },
       historyCount: view.history.length,
       configured: backendStatus().configured,
-      regenerate: () => {
-        const fresh = readSlot(getContext()?.chat ?? [], slot);
-        if (fresh) openEmpty(options, fresh, plainNav, true);
-      },
+      // 大图一直开着:出图进度显示在左上,出完自动换新图(见下面的 poll)
+      regenerate: () => void regenerateSlot(view.floor, view.seq),
     });
   };
   // 同一张卡片的历史 roll:小箭头在左上角,和切卡片的两侧大箭头分开
@@ -188,16 +201,18 @@ export function openGalleryLightbox(options: GalleryLightboxOptions): void {
     prev: at > 0 ? showRoll(at - 1) : undefined,
     next: at < rolls.length - 1 ? showRoll(at + 1) : undefined,
   };
-  // 删除收进「⋯」:只删现在看的这一次,删完留在这张卡片上
+  // 删除:只删现在看的这一次。确认框盖在大图上面,删完留在这张卡片、停在原来的位置
   nav.menu = [
     {
-      label: rolls.length > 1 ? `删除这一次（第 ${at + 1}/${rolls.length} 次）` : '删除这张图',
+      label: rolls.length > 1 ? `🗑 删除这一次（第 ${at + 1}/${rolls.length} 次）` : '🗑 删除这张图',
       danger: true,
       action: () => {
-        closeLightbox();
-        void deleteSlotImage(view.floor, view.swipeId, entry, { index: at, total: rolls.length }).then(() =>
-          openGalleryLightbox({ list, index, onShow: options.onShow }),
-        );
+        void deleteSlotImage(view.floor, view.swipeId, entry, { index: at, total: rolls.length }).then(deleted => {
+          if (!deleted) return;
+          const fresh = readSlot(getContext()?.chat ?? [], slot);
+          const left = fresh?.history ?? [];
+          openGalleryLightbox({ list, index, onShow: options.onShow, entry: left[Math.min(at, left.length - 1)] });
+        });
       },
     },
   ];
@@ -206,6 +221,14 @@ export function openGalleryLightbox(options: GalleryLightboxOptions): void {
   const before = slotImage(view)?.generationId ?? '';
   let waiting = false;
   nav.poll = () => {
+    // 编辑框 / 删除确认开着时先不动,免得新开的大图盖住它
+    if (modalOpen()) return null;
+    // 提示词被改了(大图上点了编辑并应用):编辑框关掉后换成新提示词的样子
+    const now = readSlot(getContext()?.chat ?? [], slot);
+    if (now && now.tag !== view.tag) {
+      openGalleryLightbox({ list, index, onShow: options.onShow });
+      return null;
+    }
     if (isTagPlanning(key)) {
       waiting = true;
       return { text: 'AI 重写提示词中…', cancel: () => cancelFloorTags(view.floor) };
@@ -233,4 +256,5 @@ export function openGalleryLightbox(options: GalleryLightboxOptions): void {
     // 不给 onDelete:作者灯箱栏上的垃圾桶不显示,删除只在「⋯」里
     nav,
   });
+  lowerLightbox();
 }

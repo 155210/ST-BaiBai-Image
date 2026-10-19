@@ -179,7 +179,7 @@ export async function deleteSlotImage(
   swipeId: number,
   entry: BbiImageEntry,
   roll?: { index: number; total: number },
-): Promise<void> {
+): Promise<boolean> {
   // 一张卡片 roll 过好几次时写清楚只删哪一次,免得以为整组都没了
   const which =
     roll && roll.total > 1
@@ -191,13 +191,14 @@ export async function deleteSlotImage(
     confirmText: '删除',
     tone: 'danger',
   });
-  if (!ok) return;
+  if (!ok) return false;
   // 旧提示词的图在别的 hash 桶里,要用它自己的 promptHash
   const removed = await deleteImageResult(floor, swipeId, promptHash(entry.prompt), entry.generationId);
   if (!removed) {
     toastr.error('删除失败,聊天记录未能保存', '柏宝绘');
-    return;
+    return false;
   }
   const context = getContext();
   if (context) hydrateMessage(floor, context);
+  return true;
 }
