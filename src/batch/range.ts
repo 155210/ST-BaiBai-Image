@@ -20,3 +20,12 @@ export function parseFloorRange(text: string, lastFloor: number): number[] {
   }
   return [...floors].sort((left, right) => left - right);
 }
+
+/**
+ * 「每 N 个 AI 楼出一次图」:从范围内第一个 AI 楼起,取第 1、N+1、2N+1… 个。
+ * 先抽样、再看有没有 tag,所以同一范围重跑抽中的楼不变(不会因为前一次写了 tag 而错位)。
+ */
+export function pickEveryNth(aiFloors: number[], step: number): number[] {
+  const n = Math.max(1, Math.floor(step) || 1);
+  return n === 1 ? aiFloors : aiFloors.filter((_, index) => index % n === 0);
+}

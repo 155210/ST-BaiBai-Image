@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseFloorRange } from '@/batch/range';
+import { parseFloorRange, pickEveryNth } from '@/batch/range';
 
 describe('parseFloorRange', () => {
   it('treats blank input as the whole chat', () => {
@@ -23,5 +23,16 @@ describe('parseFloorRange', () => {
 
   it('returns nothing for an empty chat', () => {
     expect(parseFloorRange('', -1)).toEqual([]);
+  });
+});
+
+describe('pickEveryNth', () => {
+  it('takes the 1st, N+1th, 2N+1th AI floor', () => {
+    expect(pickEveryNth([2, 4, 6, 8, 10, 12, 14], 3)).toEqual([2, 8, 14]);
+  });
+  it('keeps everything for step 1 or junk', () => {
+    expect(pickEveryNth([1, 3], 1)).toEqual([1, 3]);
+    expect(pickEveryNth([1, 3], 0)).toEqual([1, 3]);
+    expect(pickEveryNth([1, 3], Number.NaN)).toEqual([1, 3]);
   });
 });

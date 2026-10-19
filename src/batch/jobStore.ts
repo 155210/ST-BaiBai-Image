@@ -30,6 +30,8 @@ export interface BatchJob {
   status: 'running' | 'paused' | 'done';
   /** 暂停/结束的原因(给人看)。 */
   note: string;
+  /** 出图:只出没图的(none)、只重出旧提示词的(stale),或两种都出(all,缺省)。 */
+  mode?: 'all' | 'none' | 'stale';
   updatedAt: number;
 }
 
@@ -80,12 +82,18 @@ export function clearJob(kind: BatchKind, chatId: string): void {
   writeAll(kind, all);
 }
 
-export function createJob(kind: BatchKind, chatId: string, floors: number[]): BatchJob {
+export function createJob(
+  kind: BatchKind,
+  chatId: string,
+  floors: number[],
+  mode: BatchJob['mode'] = 'all',
+): BatchJob {
   return {
     version: 1,
     kind,
     chatId,
     floors,
+    mode,
     cursor: 0,
     written: 0,
     none: 0,

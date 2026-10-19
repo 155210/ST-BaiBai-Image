@@ -53,6 +53,12 @@ export interface PromptEditorOptions {
   historyCount: number;
   /** 后端是否已配置好。 */
   configured: boolean;
+  /**
+   * 「应用并重绘」由调用方自己出图(批量页的图片浏览用:楼层多半没显示在页面上,
+   * 没有卡片来认领自动出图标记,标记留着反而会在日后翻到那楼时再出一次)。
+   * 不给 = 照旧挂标记、由卡片出图。
+   */
+  regenerate?: () => void;
 }
 
 /** 同一时刻只允许一个编辑弹窗,重复调用先关旧的。 */
@@ -90,6 +96,7 @@ async function writeBack(
   at: PromptEditorAt,
   content: ImageTagContent,
   regenerate: boolean,
+  selfRegenerate?: () => void,
 ): Promise<boolean> {
   const context = getContext();
   if (!context) {
@@ -105,7 +112,8 @@ async function writeBack(
   const nextTag = serializeImageTag(content);
   // 标记必须挂在写回**之前**:写回即触发重水合、卡片挂载时消费标记(同 autoTag/runner.ts)。
   // force 模式无条件开跑 —— 用户点的就是「重新生成」,即便这条提示词以前出过图。
-  if (regenerate) {
+  const mark = regenerate && !selfRegenerate;
+  if (mark) {
     markForAutoGenerate(at.chatId, at.messageId, at.swipeId, at.seq, 'force');
   }
 
@@ -126,13 +134,13 @@ async function writeBack(
     );
   } catch (error) {
     // 撤销标记:只取回自己这一枚,不能用 clearAutoGenerateForFloor(会连累同楼兄弟槽位)
-    if (regenerate) consumeAutoGenerate(at.chatId, at.messageId, at.swipeId, at.seq);
+    if (mark) consumeAutoGenerate(at.chatId, at.messageId, at.swipeId, at.seq);
     toastr.error(error instanceof Error ? error.message : String(error), '柏宝绘');
     return false;
   }
 
   if (result !== 'saved') {
-    if (regenerate) consumeAutoGenerate(at.chatId, at.messageId, at.swipeId, at.seq);
+    if (mark) consumeAutoGenerate(at.chatId, at.messageId, at.swipeId, at.seq);
     toastr.warning(failureReason(result), '柏宝绘');
     return false;
   }
@@ -147,6 +155,7 @@ async function writeBack(
     if (!later || later.getCurrentChatId() !== at.chatId) return;
     hydrateMessage(at.messageId, later);
   }, LATE_HYDRATION_MS);
+  if (regenerate) selfRegenerate?.();
   return true;
 }
 
@@ -354,7 +363,7 @@ export function openPromptEditor(options: PromptEditorOptions): void {
           if (busy || closing) return;
           busy = true;
           paint();
-          void writeBack({ ...options.at, rawTag }, value, regenerate).then(ok => {
+          void writeBack({ ...options.at, rawTag }, value, regenerate, options.regenerate).then(ok => {
             busy = false;
             if (ok) close();
             else paint();
