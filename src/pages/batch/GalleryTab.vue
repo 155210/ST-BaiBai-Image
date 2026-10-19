@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 
 import BbiSelect from '@/components/BbiSelect.vue';
 import { confirmDialog } from '@/components/confirm';
-import { batchBlocker, batchState, startBatch } from '@/batch/controller';
+import { batchBlocker, batchState, savedGapMs, startBatch } from '@/batch/controller';
 import {
   checkSlotFiles,
   filterSlots,
@@ -170,15 +170,6 @@ const bulk = computed(() => {
   };
 });
 
-function gapMs(): number {
-  try {
-    const seconds = Number(localStorage.getItem('bbi_batch_image_gap_seconds') ?? '3');
-    return Math.round(Math.min(60, Math.max(0, seconds || 0)) * 1000);
-  } catch {
-    return 3000;
-  }
-}
-
 async function runBulk(): Promise<void> {
   const plan = bulk.value;
   if (!plan) return;
@@ -195,7 +186,7 @@ async function runBulk(): Promise<void> {
     confirmText: '开始',
   });
   if (!ok) return;
-  startBatch('image', plan.floors, gapMs(), plan.mode);
+  startBatch('image', plan.floors, savedGapMs('image'), { mode: plan.mode });
   emit('goRun');
 }
 

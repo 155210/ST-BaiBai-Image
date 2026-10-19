@@ -1,3 +1,5 @@
+import { reactive } from 'vue';
+
 import { IMAGE_TAG_FIND_REGEX } from '@/st/imageTagRegex';
 import { isAiStoryMessage, type STMessage } from '@/st/context';
 
@@ -91,3 +93,15 @@ export function searchNames(
     .sort((left, right) => (left.floors[0] ?? Infinity) - (right.floors[0] ?? Infinity));
   return { rows, together };
 }
+
+/**
+ * 搜索框与结果放在模块里而不是组件里:关掉柏宝绘窗口、切到别的页再回来,组件会重建,
+ * 放组件里就会被清空。只在内存里,刷新页面才清。
+ */
+export const searchState = reactive({
+  query: '',
+  withUser: false,
+  /** 上次搜的名字(换聊天后用它自动重搜)。 */
+  names: [] as string[],
+  result: null as SearchResult | null,
+});

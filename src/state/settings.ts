@@ -2118,6 +2118,14 @@ export function isCurrentChatExcluded(): boolean {
   return name !== null && settings.excludes.excludedChars.includes(name);
 }
 
+/**
+ * 用一份外部设置(「导入设置」读进来的)整体替换当前设置。走与启动载入同一个 normalize,
+ * 缺的字段补默认、坏的值纠正;之后由下面的 watch 照常落盘并同步共享渠道/排除名单。
+ */
+export function replaceSettings(raw: unknown): void {
+  applyInto(settings, normalize(raw));
+}
+
 /** 写回 extension_settings 并防抖落盘到服务器(跨设备同步的关键)。 */
 function persist(): void {
   const ctx = getContext();

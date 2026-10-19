@@ -32,6 +32,8 @@ export interface BatchJob {
   note: string;
   /** 出图:只出没图的(none)、只重出旧提示词的(stale),或两种都出(all,缺省)。 */
   mode?: 'all' | 'none' | 'stale';
+  /** 写 tag:跑完后接着给写入了 tag 的楼出图。 */
+  thenImages?: boolean;
   updatedAt: number;
 }
 

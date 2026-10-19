@@ -39,7 +39,7 @@ const TEXT = {
   tag: {
     title: '批量写生图 tag',
     intro:
-      '按楼层范围，给还没有 tag 的 AI 楼逐楼写生图 tag，和点楼层上的「生成 tag」按钮效果一样。只写 tag，不出图。',
+      '按楼层范围，给还没有 tag 的 AI 楼逐楼写生图 tag，和点楼层上的「生成 tag」按钮效果一样。默认只写 tag；勾上下面的「写完 tag 接着出图」，写完会自动把这些楼的图出了。',
     skip: '已有 tag 的楼会跳过',
     gapHint: '副 API 有频率限制时调大一点。',
     defaultGap: '2',
@@ -75,6 +75,11 @@ function writeLocal(key: string, value: string): void {
 const gapSeconds = ref(Number(readLocal(GAP_KEY, TEXT.defaultGap)) || 0);
 
 watch(gapSeconds, value => writeLocal(GAP_KEY, String(value)));
+
+const THEN_KEY = 'bbi_batch_tag_then_image';
+/** 写 tag:跑完后接着出图(只对写 tag 那块有用)。 */
+const thenImages = ref(readLocal(THEN_KEY, '0') === '1');
+watch(thenImages, value => writeLocal(THEN_KEY, value ? '1' : '0'));
 
 const gapMs = computed(() => Math.round(Math.min(60, Math.max(0, Number(gapSeconds.value) || 0)) * 1000));
 const eligible = props.kind === 'tag' ? needsTag : needsImage;
@@ -148,11 +153,14 @@ async function start(): Promise<void> {
   const body =
     props.kind === 'tag'
       ? `${head}其中 ${todo.length} 楼需要写 tag（已有 tag 的跳过）。\n` +
-        `一楼一楼按顺序跑，每楼调用一次副 API，每楼之间隔 ${gapMs.value / 1000} 秒。\n只写 tag，不会自动出图。`
+        `一楼一楼按顺序跑，每楼调用一次副 API，每楼之间隔 ${gapMs.value / 1000} 秒。\n` +
+        (thenImages.value
+          ? '写完 tag 会接着自动给这些楼出图（会消耗出图额度），不用再点「批量出图」。'
+          : '只写 tag，不出图。要出图请写完后再点下面的「批量出图」，或勾上「写完 tag 接着出图」。')
       : `${head}其中 ${todo.length} 楼共 ${images} 张图还没出。\n` +
         `一张一张按顺序出，每楼之间隔 ${gapMs.value / 1000} 秒。会消耗出图额度。`;
   const ok = await confirmDialog({ title: TEXT.title, text: body + replacing, confirmText: '开始' });
-  if (ok) startBatch(props.kind, todo, gapMs.value);
+  if (ok) startBatch(props.kind, todo, gapMs.value, { thenImages: props.kind === 'tag' && thenImages.value });
 }
 </script>
 
@@ -179,6 +187,11 @@ async function start(): Promise<void> {
       />
     </label>
     <p class="bbi-field-hint">{{ TEXT.gapHint }}</p>
+
+    <label v-if="kind === 'tag'" class="bbi-switch-row">
+      <span class="bbi-field-label">写完 tag 接着出图</span>
+      <input v-model="thenImages" class="bbi-checkbox" type="checkbox" :disabled="busy" />
+    </label>
 
     <div class="bbi-batch-actions">
       <button v-if="running" class="bbi-btn bbi-btn-danger" type="button" @click="stopBatch">停止</button>
