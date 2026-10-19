@@ -11,7 +11,6 @@ import type { LightboxNav, LightboxStatus } from './types';
  */
 
 const props = defineProps<{ nav: LightboxNav }>();
-const menuOpen = ref(false);
 
 // 生成状态不归灯箱管(在 genState 里),开着时定时问一下
 const status = ref<LightboxStatus | null>(null);
@@ -82,18 +81,8 @@ onBeforeUnmount(() => {
       <button v-if="nav.edit" class="bbi-lbnav-pill" type="button" title="编辑这张卡片的提示词" @click="nav.edit()">
         ✎ 编辑
       </button>
-      <button
-        v-if="nav.menu?.length"
-        class="bbi-lbnav-pill"
-        type="button"
-        :aria-expanded="menuOpen"
-        title="更多操作"
-        @click="menuOpen = !menuOpen"
-      >
-        {{ menuOpen ? '收起 ▴' : '⋯' }}
-      </button>
     </span>
-    <span v-if="menuOpen && nav.menu?.length && (!status || status.error)" class="bbi-lbnav-row">
+    <span v-if="nav.menu?.length && (!status || status.error)" class="bbi-lbnav-row">
       <button
         v-for="item in nav.menu"
         :key="item.label"

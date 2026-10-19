@@ -112,8 +112,7 @@ function edit(): void {
   });
 }
 
-/** 「⋯」收着的二级操作:删掉卡片上正显示的这一次 roll,其它次不动。 */
-const menuOpen = ref(false);
+/** 删掉卡片上正显示的这一次 roll,其它次不动。 */
 const deleteLabel = computed(() => {
   const total = view.value?.history.length ?? 0;
   return total > 1 ? `删除这一次（第 ${Math.min(index.value, total - 1) + 1}/${total} 次）` : '删除这张图';
@@ -123,7 +122,6 @@ function removeShown(): void {
   const current = view.value;
   const entry = shown.value;
   if (!current || !entry || busy.value) return;
-  menuOpen.value = false;
   const total = current.history.length;
   void deleteSlotImage(current.floor, current.swipeId, entry, { index: Math.min(index.value, total - 1), total });
 }
@@ -165,18 +163,9 @@ function onImageError(): void {
       </button>
       <button type="button" title="编辑提示词" :disabled="busy" @click="edit">{{ compact ? '✎' : '编辑' }}</button>
       <button type="button" title="定位到楼层" @click="jumpToFloor(view.floor)">{{ compact ? '⌖' : '定位' }}</button>
-      <button
-        v-if="shown"
-        type="button"
-        :title="menuOpen ? '收起' : '更多操作'"
-        :aria-expanded="menuOpen"
-        @click="menuOpen = !menuOpen"
-      >
-        {{ menuOpen ? '▴' : '⋯' }}
+      <button v-if="shown" class="is-danger" type="button" :title="deleteLabel" :disabled="busy" @click="removeShown">
+        {{ compact ? '🗑' : '删除' }}
       </button>
-    </div>
-    <div v-if="menuOpen && shown" class="bbi-gitem-menu">
-      <button class="is-danger" type="button" :disabled="busy" @click="removeShown">{{ deleteLabel }}</button>
     </div>
   </div>
 </template>
@@ -304,28 +293,9 @@ function onImageError(): void {
   padding: 0 4px;
   font-size: 12px;
 }
-.bbi-gitem-menu {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 0 6px 6px;
-}
-.bbi-gitem-menu button {
-  min-height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--bbi-line-strong);
-  border-radius: var(--bbi-radius-sm);
-  background: var(--bbi-surface);
-  font-size: 12px;
-  cursor: pointer;
-}
-.bbi-gitem-menu button.is-danger {
+.bbi-gitem-bar button.is-danger {
   border-color: var(--bbi-danger);
   color: var(--bbi-danger);
-}
-.bbi-gitem-menu button:disabled {
-  opacity: 0.45;
-  cursor: default;
 }
 .bbi-gitem-count {
   font-family: var(--bbi-font-mono);

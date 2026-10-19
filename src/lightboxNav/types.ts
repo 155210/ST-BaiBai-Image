@@ -10,7 +10,7 @@ export interface LightboxNav {
   edit?: () => void;
   /** 同一张卡片的历史 roll(小箭头,和切卡片的大箭头分开)。 */
   rolls?: { index: number; total: number; prev?: () => void; next?: () => void };
-  /** 「⋯」里收起来的操作(比如删除),点开才看得到,防误触。 */
+  /** 额外操作(比如删除当前这一次),摆在「重新生成」那一行下面。 */
   menu?: { label: string; danger?: boolean; action: () => void }[];
   /**
    * 灯箱开着时每 800ms 调一次,返回这张卡片的生成状态(生成中 / 排队中 / 失败);
