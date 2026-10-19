@@ -7,6 +7,7 @@ import { batchBlocker, batchState, savedGapMs, startBatch } from '@/batch/contro
 import {
   checkSlotFiles,
   filterSlots,
+  type GalleryOrder,
   GALLERY_SIZES,
   listSlots,
   type GalleryFilter,
@@ -37,19 +38,26 @@ const FILTERS: { value: GalleryFilter; label: string }[] = [
   { value: 'stale', label: '只看旧提示词' },
 ];
 
+const ORDERS: { value: GalleryOrder; label: string }[] = [
+  { value: 'asc', label: '楼层正序（旧→新）' },
+  { value: 'desc', label: '楼层倒序（新→旧）' },
+  { value: 'recent', label: '最近出图在前' },
+];
+
 interface Prefs {
   filter: GalleryFilter;
-  reverse: boolean;
+  order: GalleryOrder;
   size: GallerySize;
 }
 
 function readPrefs(): Prefs {
-  const fallback: Prefs = { filter: 'all', reverse: false, size: 'l' };
+  const fallback: Prefs = { filter: 'all', order: 'asc', size: 'l' };
   try {
-    const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') as Partial<Prefs>;
+    // 旧版存的是 reverse: boolean
+    const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') as Partial<Prefs> & { reverse?: boolean };
     return {
       filter: FILTERS.some(item => item.value === saved.filter) ? saved.filter! : fallback.filter,
-      reverse: saved.reverse === true,
+      order: ORDERS.some(item => item.value === saved.order) ? saved.order! : saved.reverse ? 'desc' : 'asc',
       size: saved.size && saved.size in GALLERY_SIZES ? saved.size : fallback.size,
     };
   } catch {
@@ -114,7 +122,7 @@ async function load(): Promise<void> {
 const list = computed(() => {
   void tick.value;
   const chat = getContext()?.chat ?? [];
-  return filterSlots(chat, slots.value, prefs.value.filter, prefs.value.reverse);
+  return filterSlots(chat, slots.value, prefs.value.filter, prefs.value.order);
 });
 
 const perPage = computed(() => GALLERY_SIZES[prefs.value.size].page);
@@ -173,13 +181,8 @@ function setSize(size: GallerySize): void {
   page.value = Math.floor(first / GALLERY_SIZES[size].page);
 }
 
-function toggleReverse(): void {
-  prefs.value.reverse = !prefs.value.reverse;
-  page.value = 0;
-}
-
 watch(
-  () => prefs.value.filter,
+  () => [prefs.value.filter, prefs.value.order],
   () => {
     page.value = 0;
   },
@@ -243,9 +246,7 @@ onUnmounted(() => {
     <div class="bbi-gtools">
       <BbiSelect v-model="prefs.filter" :options="FILTERS" class="bbi-gfilter" />
       <button class="bbi-btn bbi-btn-sm" type="button" :disabled="loading" @click="load">刷新列表</button>
-      <button class="bbi-btn bbi-btn-sm" type="button" @click="toggleReverse">
-        {{ prefs.reverse ? '倒序（新→旧）' : '正序（旧→新）' }}
-      </button>
+      <BbiSelect v-model="prefs.order" :options="ORDERS" class="bbi-gfilter" />
       <div class="bbi-segmented bbi-gsizes" role="tablist" aria-label="图片大小">
         <button
           v-for="(item, size) in GALLERY_SIZES"
