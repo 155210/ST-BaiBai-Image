@@ -48,13 +48,19 @@ async function onImport(event: Event): Promise<void> {
   input.value = '';
   if (!file) return;
   try {
-    const { entries, promptCount: count } = parseSTPreset(JSON.parse(await file.text()));
+    const parsed = parseSTPreset(JSON.parse(await file.text()));
     settings.autoTag.heavyPreset = {
       enabled: preset.value.enabled,
       name: file.name.replace(/\.json$/i, ''),
-      entries,
+      entries: parsed.entries,
+      squash: parsed.squash,
     };
-    toastr.success(`已导入 ${count} 个条目`, '柏宝绘');
+    const notes = [
+      `已导入 ${parsed.promptCount} 个条目(启用 ${parsed.enabledCount})`,
+      parsed.droppedMarkers ? `丢弃角色卡/世界书等占位 ${parsed.droppedMarkers} 个` : '',
+      parsed.hadChatHistory ? '' : '预设里没有聊天记录,柏宝绘提示词放在了末尾',
+    ].filter(Boolean);
+    toastr.success(notes.join(';'), '柏宝绘');
   } catch (error) {
     toastr.error(error instanceof Error ? error.message : String(error), '导入预设失败');
   }

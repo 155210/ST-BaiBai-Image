@@ -37,6 +37,8 @@ export interface HeavyPresetSettings {
   name: string;
   /** 条目列表,顺序即相对条目的拼装顺序;总含且只含一个占位条目。 */
   entries: HeavyEntry[];
+  /** 合并相邻的 system 消息(取自预设的 squash_system_messages,与酒馆同义)。 */
+  squash: boolean;
 }
 
 export function heavySlotEntry(): HeavyEntry {
@@ -53,7 +55,7 @@ export function heavySlotEntry(): HeavyEntry {
 }
 
 export function heavyPresetDefaults(): HeavyPresetSettings {
-  return { enabled: true, name: '', entries: [heavySlotEntry()] };
+  return { enabled: true, name: '', entries: [heavySlotEntry()], squash: false };
 }
 
 function normalizeRole(value: unknown): HeavyRole {
@@ -97,6 +99,7 @@ export function normalizeHeavyPreset(raw: unknown): HeavyPresetSettings {
     enabled: typeof r.enabled === 'boolean' ? r.enabled : d.enabled,
     name: typeof r.name === 'string' ? r.name : d.name,
     entries,
+    squash: typeof r.squash === 'boolean' ? r.squash : d.squash,
   };
 }
 
@@ -126,7 +129,7 @@ interface STOrderItem {
 /** 酒馆的聊天记录占位;柏宝绘的默认提示词放在它的位置上。 */
 const CHAT_HISTORY_ID = 'chatHistory';
 
-/** 从 prompt_order 里取一份顺序:优先全局默认(100001),再 100000,再条目最多的那份。 */
+/** 从 prompt_order 里取一份顺序:优先全局默认(100001),找不到取条目最多的那份(最接近完整的一份)。 */
 function pickOrder(rawOrder: unknown): STOrderItem[] | null {
   if (!Array.isArray(rawOrder) || !rawOrder.length) return null;
   // 提示词管理器单独导出的格式:prompt_order 直接就是 [{identifier, enabled}]
@@ -136,23 +139,33 @@ function pickOrder(rawOrder: unknown): STOrderItem[] | null {
       !!x && typeof x === 'object' && Array.isArray((x as { order?: unknown }).order),
   );
   const byId = (id: number) => lists.find(x => Number(x.character_id) === id)?.order;
-  return (
-    byId(100001) ??
-    byId(100000) ??
-    lists.slice().sort((a, b) => b.order.length - a.order.length)[0]?.order ??
-    null
-  );
+  return byId(100001) ?? lists.slice().sort((a, b) => b.order.length - a.order.length)[0]?.order ?? null;
 }
 
 /**
  * 解析酒馆预设 JSON(整份聊天补全预设,或提示词管理器单独导出的 {data:{prompts,prompt_order}})。
  *
- * - 按 prompt_order 排序与取开关;不在 order 里的条目追加在末尾、默认关闭。
+ * - 按 prompt_order 排序与取开关;不在 order 里的条目追加在末尾、默认关闭。开关只认
+ *   prompt_order[].enabled(酒馆提示词管理器的勾选框写在那里);prompts[].enabled 在导出的
+ *   预设里几乎恒为 false 或缺失,不是开关状态,只在整份预设没有 prompt_order 时兜底。
  * - 标记条目(角色卡、世界书、示例对话等,由酒馆现场填充)不导入:柏宝绘的默认提示词已自带
  *   角色卡/人设/世界书;聊天记录标记换成柏宝绘占位条目。没有聊天记录标记时占位放末尾。
  * - 触发器写明了、但不含「正常」的条目导入为关闭(酒馆普通生成时它也不发)。
+ * - 「聊天记录」在预设里被关掉也照样放占位(恒启用),否则默认提示词发不出去。
  */
-export function parseSTPreset(json: unknown): { entries: HeavyEntry[]; promptCount: number } {
+export interface STPresetImport {
+  entries: HeavyEntry[];
+  squash: boolean;
+  /** 导入的条目数(不含占位)、其中启用的数目。 */
+  promptCount: number;
+  enabledCount: number;
+  /** 丢弃的占位条目数(角色卡/世界书/示例对话等)。 */
+  droppedMarkers: number;
+  /** 预设里有没有「聊天记录」;没有时占位追加在末尾。 */
+  hadChatHistory: boolean;
+}
+
+export function parseSTPreset(json: unknown): STPresetImport {
   const root = (json && typeof json === 'object' ? json : null) as Record<string, unknown> | null;
   const data = (root?.data && typeof root.data === 'object' ? root.data : root) as Record<string, unknown> | null;
   const prompts = data?.prompts;
@@ -182,6 +195,7 @@ export function parseSTPreset(json: unknown): { entries: HeavyEntry[]; promptCou
 
   const entries: HeavyEntry[] = [];
   let slotPlaced = false;
+  let droppedMarkers = 0;
   for (const { id, enabled } of sequence) {
     const p = byId.get(id)!;
     if (id === CHAT_HISTORY_ID) {
@@ -189,7 +203,10 @@ export function parseSTPreset(json: unknown): { entries: HeavyEntry[]; promptCou
       slotPlaced = true;
       continue;
     }
-    if (p.marker === true) continue;
+    if (p.marker === true) {
+      droppedMarkers++;
+      continue;
+    }
     const triggers = Array.isArray(p.injection_trigger) ? p.injection_trigger : [];
     const triggerOk = !triggers.length || triggers.includes('normal');
     const selfEnabled = typeof p.enabled === 'boolean' ? p.enabled : true;
@@ -205,7 +222,15 @@ export function parseSTPreset(json: unknown): { entries: HeavyEntry[]; promptCou
     });
   }
   if (!slotPlaced) entries.push(heavySlotEntry());
-  return { entries, promptCount: entries.length - 1 };
+  const imported = entries.filter(e => e.id !== HEAVY_SLOT_ID);
+  return {
+    entries,
+    squash: data?.squash_system_messages === true || root?.squash_system_messages === true,
+    promptCount: imported.length,
+    enabledCount: imported.filter(e => e.enabled).length,
+    droppedMarkers,
+    hadChatHistory: slotPlaced,
+  };
 }
 
 /**
@@ -215,11 +240,13 @@ export function parseSTPreset(json: unknown): { entries: HeavyEntry[]; promptCou
  * - 深度条目插进默认消息链(柏宝绘的「聊天记录」),规则与酒馆一致:深度 0 在链尾,
  *   深度 N 在倒数第 N 条之前;同深度按 order 从小到大,同 order 内同身份的条目合并为一条。
  * - 关闭的、内容为空的条目跳过;substitute 用来展开 {{char}}/{{user}} 等酒馆宏(只作用于预设条目)。
+ * - squash 开着时,最终消息里相邻的 system 合并成一条(酒馆「压缩系统消息」同义)。
  */
 export function assembleHeavyMessages(
   entries: HeavyEntry[],
   defaultMessages: ChatMsg[],
   substitute: (text: string) => string = text => text,
+  squash = false,
 ): ChatMsg[] {
   const live = entries
     .filter(e => e.id === HEAVY_SLOT_ID || e.enabled)
@@ -256,5 +283,12 @@ export function assembleHeavyMessages(
     if (e.id === HEAVY_SLOT_ID) out.push(...chatBlock);
     else if (e.position === 'relative') out.push({ role: e.role, content: e.content });
   }
-  return out;
+  if (!squash) return out;
+  const squashed: ChatMsg[] = [];
+  for (const m of out) {
+    const prev = squashed[squashed.length - 1];
+    if (prev?.role === 'system' && m.role === 'system') prev.content += `\n\n${m.content}`;
+    else squashed.push({ ...m });
+  }
+  return squashed;
 }

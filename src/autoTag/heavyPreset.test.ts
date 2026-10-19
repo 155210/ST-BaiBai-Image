@@ -98,6 +98,54 @@ describe('parseSTPreset', () => {
     expect(entries.map(e => e.id)).toEqual(['a', HEAVY_SLOT_ID]);
   });
 
+  it('汇报导入统计,读取压缩系统消息开关', () => {
+    const parsed = parseSTPreset({ ...ST_PRESET, squash_system_messages: true });
+    expect(parsed).toMatchObject({ promptCount: 6, enabledCount: 3, droppedMarkers: 2, hadChatHistory: true, squash: true });
+    expect(parseSTPreset(ST_PRESET).squash).toBe(false);
+  });
+
+  it('开关只认 prompt_order,不看 prompts[].enabled;聊天记录被关掉也放占位', () => {
+    const { entries } = parseSTPreset({
+      prompts: [
+        { identifier: 'a', role: 'system', content: 'a', enabled: false },
+        { identifier: 'chatHistory', marker: true },
+      ],
+      prompt_order: [
+        {
+          character_id: 100001,
+          order: [
+            { identifier: 'a', enabled: true },
+            { identifier: 'chatHistory', enabled: false },
+          ],
+        },
+      ],
+    });
+    expect(entries.map(e => [e.id, e.enabled])).toEqual([
+      ['a', true],
+      [HEAVY_SLOT_ID, true],
+    ]);
+  });
+
+  it('没有全局顺序时取条目最多的那份', () => {
+    const { entries } = parseSTPreset({
+      prompts: [
+        { identifier: 'a', content: 'a' },
+        { identifier: 'b', content: 'b' },
+      ],
+      prompt_order: [
+        { character_id: 100000, order: [{ identifier: 'a', enabled: true }] },
+        {
+          character_id: 7,
+          order: [
+            { identifier: 'b', enabled: true },
+            { identifier: 'a', enabled: true },
+          ],
+        },
+      ],
+    });
+    expect(entries.map(e => e.id)).toEqual(['b', 'a', HEAVY_SLOT_ID]);
+  });
+
   it('没有 prompts 时报错', () => {
     expect(() => parseSTPreset({ temperature: 1 })).toThrow(/prompts/);
     expect(() => parseSTPreset(null)).toThrow();
@@ -159,6 +207,22 @@ describe('assembleHeavyMessages', () => {
       { role: 'system', content: 'a\nb' },
       { role: 'system', content: 'late' },
     ]);
+  });
+
+  it('squash 开着时相邻 system 合并,隔着别的身份不合并', () => {
+    const messages = assembleHeavyMessages(
+      [entry({ id: 'm' }), heavySlotEntry(), entry({ id: 'post', role: 'user' })],
+      DEFAULT_CHAIN,
+      undefined,
+      true,
+    );
+    expect(messages).toEqual([
+      { role: 'system', content: 'm\n\njailbreak\n\ncontract' },
+      { role: 'user', content: 'target' },
+      { role: 'user', content: 'post' },
+    ]);
+    // 原数组不被改写
+    expect(DEFAULT_CHAIN[0].content).toBe('jailbreak');
   });
 
   it('导入的预设整体拼装', () => {

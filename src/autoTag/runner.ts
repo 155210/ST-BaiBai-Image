@@ -351,6 +351,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
           settings.autoTag.heavyPreset.entries,
           messages,
           typeof context.substituteParams === 'function' ? context.substituteParams.bind(context) : undefined,
+          settings.autoTag.heavyPreset.squash,
         )
       : null;
     let useHeavy = false;
