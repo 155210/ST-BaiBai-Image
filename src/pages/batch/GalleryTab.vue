@@ -13,8 +13,10 @@ import {
   type GallerySize,
   type GallerySlot,
 } from '@/batch/gallery';
+import { openGalleryLightbox } from '@/batch/galleryLightbox';
 import { parseFloorRange } from '@/batch/range';
 import { batchRange } from '@/batch/rangeStore';
+import type { BbiImageEntry } from '@/floor/storage';
 import { getContext } from '@/st/context';
 import GalleryItem from './GalleryItem.vue';
 
@@ -138,6 +140,23 @@ function jumpInput(): void {
   const target = Math.floor(Number(pageInput.value));
   if (target >= 1) goto(target - 1);
   else pageInput.value = String(page.value + 1);
+}
+
+/** 点开大图;灯箱里左右切到别的卡片时,列表翻到那一页。 */
+function openImage(slot: GallerySlot, entry: BbiImageEntry): void {
+  const snapshot = list.value;
+  openGalleryLightbox({
+    list: snapshot,
+    index: snapshot.indexOf(slot),
+    entry,
+    onShow: index => {
+      const target = Math.floor(index / perPage.value);
+      if (target !== page.value) {
+        page.value = target;
+        pageInput.value = String(target + 1);
+      }
+    },
+  });
 }
 
 function setSize(size: GallerySize): void {
@@ -277,6 +296,7 @@ onUnmounted(() => {
           :chat-id="chatId"
           :size="prefs.size"
           :tick="tick"
+          @open="entry => openImage(slot, entry)"
         />
         <p v-if="!pageSlots.length && !loading && !error" class="bbi-field-hint bbi-gempty">
           这个范围里没有卡片。先在上面填楼层范围，再点「刷新列表」。

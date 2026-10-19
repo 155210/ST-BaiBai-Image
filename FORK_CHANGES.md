@@ -29,6 +29,10 @@
 | src/state/globalCharTags.ts | export function replaceGlobalCharTags | 导入设置时替换全局角色库 | #5 |
 | src/pages/settings/index.vue | import BackupSection from './BackupSection.vue' | 设置页挂「导出 / 导入设置」 | #5 |
 | src/pages/settings/index.vue | <BackupSection /> | 同上 | #5 |
+| src/floor/Lightbox.vue | import LightboxNavButtons from '@/lightboxNav/LightboxNav.vue'; | 灯箱左右切换箭头 | 图片浏览左右切换 |
+| src/floor/Lightbox.vue | nav?: LightboxNav; | 同上：灯箱接收切换回调 | 图片浏览左右切换 |
+| src/floor/Lightbox.vue | <LightboxNavButtons v-if="nav" :nav="nav" /> | 同上：放箭头 | 图片浏览左右切换 |
+| src/floor/lightbox.ts | nav: options.nav, | 同上：传给灯箱 | 图片浏览左右切换 |
 
 ## 其他本分支改动（不在原作者文件里，或合并时一定会冲突、手动处理）
 
@@ -42,6 +46,7 @@
 - `src/pages/batch/`：批量页界面
 - `src/floor/slotGenerate.ts`：单张出图（卡片与批量共用）
 - `src/state/backup.ts`、`src/pages/settings/BackupSection.vue`：导出 / 导入设置
+- `src/lightboxNav/`、`src/batch/galleryLightbox.ts`：图片浏览大图左右切换
 - `src/fork.guard.test.ts`、本文件
 
 ## 合并原作者更新的步骤

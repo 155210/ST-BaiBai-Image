@@ -1,6 +1,7 @@
 import { h, render } from 'vue';
 
 import Lightbox from '@/floor/Lightbox.vue';
+import type { LightboxNav } from '@/lightboxNav/types';
 
 /**
  * 命令式打开图片灯箱(供楼层卡片调用)。
@@ -21,6 +22,8 @@ export interface LightboxOptions {
   filename?: string;
   /** 提供了才显示删除按钮;点删除先关灯箱再回调。 */
   onDelete?: () => void;
+  /** fork:左右切换(src/lightboxNav/) */
+  nav?: LightboxNav;
 }
 
 /** 同一时刻只允许一个灯箱,重复调用先关旧的。 */
@@ -48,6 +51,7 @@ export function openLightbox(options: LightboxOptions): void {
       prompt: options.prompt,
       filename: options.filename,
       deletable: !!options.onDelete,
+      nav: options.nav,
       onClose: close,
       onDelete: () => {
         close();
