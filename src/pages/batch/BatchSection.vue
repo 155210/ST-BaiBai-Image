@@ -39,7 +39,7 @@ const TEXT = {
   tag: {
     title: '批量写生图 tag',
     intro:
-      '按楼层范围，给还没有 tag 的 AI 楼逐楼写生图 tag，和点楼层上的「生成 tag」按钮效果一样。默认只写 tag；勾上下面的「写完 tag 接着出图」，写完会自动把这些楼的图出了。',
+      '按楼层范围，给还没有 tag 的 AI 楼逐楼写生图 tag，和点楼层上的「生成 tag」按钮效果一样。默认只写 tag；勾上下面的「写完 tag 接着出图」，每写完一楼就马上出这一楼的图，再去下一楼。',
     skip: '已有 tag 的楼会跳过',
     gapHint: '副 API 有频率限制时调大一点。',
     defaultGap: '2',
@@ -117,7 +117,8 @@ const statusText = computed(() => {
   if (!current) return '';
   if (running.value) {
     if (batchState.waitingVisible) return '暂停中：页面在后台';
-    return batchState.currentFloor !== null ? `正在跑第 ${batchState.currentFloor} 楼` : '运行中';
+    if (batchState.currentFloor === null) return '运行中';
+    return `正在跑第 ${batchState.currentFloor} 楼${batchState.currentImaging ? '（出图中）' : ''}`;
   }
   if (current.status === 'done') return '已跑完';
   return current.note || '上次没跑完';
@@ -155,7 +156,7 @@ async function start(): Promise<void> {
       ? `${head}其中 ${todo.length} 楼需要写 tag（已有 tag 的跳过）。\n` +
         `一楼一楼按顺序跑，每楼调用一次副 API，每楼之间隔 ${gapMs.value / 1000} 秒。\n` +
         (thenImages.value
-          ? '写完 tag 会接着自动给这些楼出图（会消耗出图额度），不用再点「批量出图」。'
+          ? '每写完一楼 tag 就马上出这一楼的图，再去下一楼（会消耗出图额度），不用再点「批量出图」。某楼出图失败不会卡住，跑完后会给没出成的楼再补一轮。'
           : '只写 tag，不出图。要出图请写完后再点下面的「批量出图」，或勾上「写完 tag 接着出图」。')
       : `${head}其中 ${todo.length} 楼共 ${images} 张图还没出。\n` +
         `一张一张按顺序出，每楼之间隔 ${gapMs.value / 1000} 秒。会消耗出图额度。`;

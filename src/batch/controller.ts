@@ -31,6 +31,8 @@ export const batchState = reactive({
   jobs: { tag: null, image: null } as Record<BatchKind, BatchJob | null>,
   /** 正在跑的楼。 */
   currentFloor: null as number | null,
+  /** 写 tag 并接着出图时,这一楼正在出图(界面上标一下)。 */
+  currentImaging: false,
   /** 页面在后台、等回前台。 */
   waitingVisible: false,
   /** 收尾核对的结果(给人看),按种类分开。 */
@@ -182,11 +184,22 @@ async function run(job: BatchJob, gapMs: number): Promise<void> {
     await runBatchLoop(
       job,
       {
-        runFloor: floor => {
+        runFloor: async floor => {
           batchState.currentFloor = floor;
-          return kind === 'tag'
-            ? requestFloorTags(floor, { quiet: true })
-            : runImageFloor(floor, signal, job.mode ?? 'all');
+          if (kind === 'image') return runImageFloor(floor, signal, job.mode ?? 'all');
+          const outcome = await requestFloorTags(floor, { quiet: true });
+          // 「写完 tag 接着出图」:写完这一楼马上出这一楼的图,再去下一楼。
+          // 出图失败不算这楼失败(tag 已经写进去了),跑完整轮后 chainImages 会给没出成的楼补一轮。
+          if (job.thenImages && outcome.kind === 'written' && !signal.aborted && imagesReady() && needsImage(floor)) {
+            batchState.currentImaging = true;
+            try {
+              const image = await runImageFloor(floor, signal, 'all');
+              if (image.kind === 'failed') log(`第 ${floor} 楼出图失败：${image.reason ?? '没有出图'}（跑完后会再补一轮）`);
+            } finally {
+              batchState.currentImaging = false;
+            }
+          }
+          return outcome;
         },
         currentChatId,
         isEligible: eligible(job),
@@ -224,7 +237,15 @@ async function run(job: BatchJob, gapMs: number): Promise<void> {
   chainImages(job);
 }
 
-/** 「写完 tag 接着出图」:写 tag 跑完后,给这次写入了 tag 的楼开一个出图任务。 */
+/** 出图渠道能不能用;不能用就只写 tag,跑完由 chainImages 提示原因。 */
+function imagesReady(): boolean {
+  return backendStatus().configured;
+}
+
+/**
+ * 「写完 tag 接着出图」的补漏:每楼写完 tag 已经当场出过图,
+ * 这里只给这次写入了 tag、却还有图没出成的楼(出图失败或中途停过)再开一轮出图。
+ */
 function chainImages(job: BatchJob): void {
   if (job.kind !== 'tag' || !job.thenImages || job.status !== 'done') return;
   if (currentChatId() !== job.chatId || batchState.running) return;
@@ -236,7 +257,7 @@ function chainImages(job: BatchJob): void {
     toastr.warning(`tag 写完了，但没能接着出图：${blocker}`, '柏宝绘');
     return;
   }
-  log(`接着出图：${floors.length} 楼`);
+  log(`补出图：${floors.length} 楼还有图没出成`);
   startBatch('image', floors, savedGapMs('image'));
 }
 
@@ -313,7 +334,8 @@ export function stopBatch(): void {
   controller.abort();
   // 在途的那一楼一起取消,不必等它的请求回来
   if (batchState.running === 'tag' && batchState.currentFloor !== null) cancelFloorTags(batchState.currentFloor);
-  if (batchState.running === 'image') cancelCurrentImage();
+  // 写 tag 接着出图时,在途的也可能是这一楼的图
+  cancelCurrentImage();
   log('正在停止…');
 }
 
