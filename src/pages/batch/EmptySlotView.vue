@@ -16,9 +16,11 @@ defineProps<{
   /** 生成状态(reactive,由 galleryLightbox.ts 定时更新)。 */
   state: { busy: boolean; busyText: string; error: string };
   prompt: string;
+  /** 从大图点了「重新生成」:旧图还在,失败了能回去看。 */
+  regen?: boolean;
 }>();
 
-const emit = defineEmits<{ close: []; generate: []; cancel: [] }>();
+const emit = defineEmits<{ close: []; generate: []; cancel: []; back: [] }>();
 
 function onKeydown(event: KeyboardEvent): void {
   if (event.key === 'Escape') {
@@ -39,13 +41,18 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown, true));
       <div class="bbi-empty-lb__body" @click.stop>
         <p class="bbi-empty-lb__title">{{ title }}</p>
         <template v-if="state.busy">
-          <p class="bbi-empty-lb__state">{{ state.busyText }}</p>
+          <p class="bbi-empty-lb__state">{{ regen ? `重新生成：${state.busyText}` : state.busyText }}</p>
           <button class="bbi-empty-lb__btn" type="button" @click="emit('cancel')">取消</button>
         </template>
         <template v-else>
-          <p class="bbi-empty-lb__state">还没有图</p>
+          <p class="bbi-empty-lb__state">{{ regen ? '没有生成新图' : '还没有图' }}</p>
           <p v-if="state.error" class="bbi-empty-lb__error">{{ state.error }}</p>
-          <button class="bbi-empty-lb__btn is-main" type="button" @click="emit('generate')">生成图片</button>
+          <div class="bbi-empty-lb__actions">
+            <button class="bbi-empty-lb__btn is-main" type="button" @click="emit('generate')">
+              {{ regen ? '再试一次' : '生成图片' }}
+            </button>
+            <button v-if="regen" class="bbi-empty-lb__btn" type="button" @click="emit('back')">看旧图</button>
+          </div>
         </template>
         <p v-if="prompt" class="bbi-empty-lb__prompt">{{ prompt }}</p>
       </div>
@@ -109,6 +116,10 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown, true));
   font-size: 12px;
   color: oklch(0.75 0.15 30);
   word-break: break-all;
+}
+.bbi-empty-lb__actions {
+  display: flex;
+  gap: 10px;
 }
 .bbi-empty-lb__btn {
   padding: 8px 22px;
