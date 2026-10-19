@@ -371,6 +371,9 @@ describe('auto tag prompt', () => {
   // NSFW 条款+自查),三层重写时三份全丢——规则只在 spec 里、思考回路没有检查位,
   // 漏写概率回升。这条钉死三份各自的落点口径,且 NSFW 不带年龄限定。
   it('keeps fandom identity and NSFW checkpoints inside each backend thinking', async () => {
+    // 默认破限核心本身带「成年人」口径;这条只管思维链与规范不带年龄限定,不查破限。
+    const withoutCore = (value: string) =>
+      value.replace(/<nvwa_standalone_core>[\s\S]*?<\/nvwa_standalone_core>/g, '');
     const options: AutoTagSettings = {
       enabled: true,
       contextMessages: 2,
@@ -416,7 +419,7 @@ describe('auto tag prompt', () => {
       expect(text).toContain('若正文明确为显式 NSFW 场景');
       expect(text).toContain('若本图是显式 NSFW 场景');
       expect(text).not.toContain('若本图协议含 negative 键');
-      expect(text).not.toContain('成年人');
+      expect(withoutCore(text)).not.toContain('成年人');
       // NAI 侧用户没有白痘问题,不引入这条禁令。
       expect(text).not.toContain('白皙肤色词');
       expect(text).not.toContain('白皙词一律禁止');
@@ -432,7 +435,7 @@ describe('auto tag prompt', () => {
       expect(text).toContain('若正文明确为显式 NSFW 场景');
       expect(text).toContain('若本图是显式 NSFW 场景');
       expect(text).not.toContain('若本图协议含 negative 键');
-      expect(text).not.toContain('成年人');
+      expect(withoutCore(text)).not.toContain('成年人');
       expect(text).not.toContain('白皙肤色词');
     } finally {
       settings.defaultBackend = oldBackend;
