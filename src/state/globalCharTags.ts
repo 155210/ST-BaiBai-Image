@@ -119,6 +119,15 @@ export function initGlobalCharTags(): void {
   bindListener();
 }
 
+/** 「导入设置」:整体替换全局角色库,返回导入后的条目数。 */
+export function replaceGlobalCharTags(entries: unknown): number {
+  const next = normalizeGlobalEntries({ version: 3, entries: Array.isArray(entries) ? entries : [] });
+  globalCharTagLib.entries = next;
+  persist();
+  recomputeCharTags();
+  return next.length;
+}
+
 export function findGlobalCharTag(name: string): CharTagEntry | undefined {
   const clean = name.trim();
   return globalCharTagLib.entries.find(entry => entry.name === clean);

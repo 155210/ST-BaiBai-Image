@@ -2,7 +2,6 @@
 import { computed, ref, watch } from 'vue';
 
 import {
-  deleteSlotImage,
   jumpToFloor,
   readSlot,
   regenerateSlot,
@@ -10,16 +9,13 @@ import {
   type GallerySlot,
 } from '@/batch/gallery';
 import { effectiveOrientation } from '@/backends/size';
-import { imageDownloadFileName } from '@/floor/download';
 import { cancelGen, getGenRecord, slotKey } from '@/floor/genState';
-import { openLightbox } from '@/floor/lightbox';
 import { confirmImageMissing } from '@/floor/missingImages';
 import { openPromptEditor } from '@/floor/promptEditor';
+import type { BbiImageEntry } from '@/floor/storage';
 import { backendStatus } from '@/generate';
-import { formatGenerationMeta } from '@/generationMeta';
 import { activeOrientationLock } from '@/state/settings';
 import { getContext } from '@/st/context';
-import { formatPromptText } from '@/st/imageTagRegex';
 
 /**
  * 图片浏览里的一张卡片(一个 tag 槽位)。数据每次现读(chat 不是响应式的,靠 tick 重算),
@@ -33,6 +29,8 @@ const props = defineProps<{
   /** 定时 +1,让卡片跟上聊天数据的变化。 */
   tick: number;
 }>();
+/** 点开大图:交给图片浏览打开灯箱,好在卡片之间左右切换。 */
+const emit = defineEmits<{ open: [entry: BbiImageEntry] }>();
 
 const view = computed(() => {
   void props.tick;
@@ -85,31 +83,9 @@ const busyText = computed(() => {
   return running.phase === 'queued' ? '排队中…' : '生成中…';
 });
 
-function promptText(): string {
-  const current = view.value;
-  if (!current) return '';
-  const { content } = current;
-  return formatPromptText({
-    tag: content.tag,
-    nl: content.nl,
-    negative: content.negative,
-    characters: content.characters,
-  });
-}
-
 function openImage(): void {
-  const current = view.value;
   const entry = shown.value;
-  if (!current || !entry) return;
-  const context = getContext();
-  const characterName = context?.chat[current.floor]?.name || context?.name2 || '';
-  const at = { floor: current.floor, swipeId: current.swipeId };
-  openLightbox({
-    src: entry.path,
-    prompt: [promptText(), entry.meta ? formatGenerationMeta(entry.meta) : ''].filter(Boolean).join('\n\n'),
-    filename: imageDownloadFileName(entry.path, characterName, entry.generationId),
-    onDelete: () => void deleteSlotImage(at.floor, at.swipeId, entry),
-  });
+  if (entry) emit('open', entry);
 }
 
 function roll(): void {
