@@ -5,6 +5,8 @@ import Icon from '@/components/Icon.vue';
 import { saveImageFile } from '@/floor/download';
 import { copyText } from '@/st/clipboard';
 import { modalHost } from '@/state/ui';
+import LightboxNavButtons from '@/lightboxNav/LightboxNav.vue'; // fork:左右切换
+import type { LightboxNav } from '@/lightboxNav/types';
 
 /**
  * 图片灯箱(楼层卡片点击放大)。
@@ -37,6 +39,8 @@ const props = defineProps<{
   filename?: string;
   /** 有值才显示删除按钮。 */
   deletable?: boolean;
+  /** fork:左右切换(src/lightboxNav/) */
+  nav?: LightboxNav;
 }>();
 
 const emit = defineEmits<{ close: []; delete: [] }>();
@@ -191,6 +195,7 @@ const promptText = computed(() => (props.prompt ?? '').trim());
       </div>
 
       <p v-if="promptText" class="bbi-lightbox__prompt" @click.stop>{{ promptText }}</p>
+      <LightboxNavButtons v-if="nav" :nav="nav" />
     </div>
   </Teleport>
 </template>
