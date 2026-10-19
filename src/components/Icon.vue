@@ -55,6 +55,8 @@ const PATHS: Record<string, string> = {
   // 物品:立方体
   items:
     '<path d="M12 3.5 20 8v8l-8 4.5L4 16V8z"/><path d="M4 8l8 4.5L20 8"/><path d="M12 12.5V20.5"/>',
+  // 批量:三行列表 + 勾
+  batch: '<path d="M4 6.5h9M4 12h9M4 17.5h6"/><path d="M14.5 16.5l2.2 2.2 4-4.2"/>',
   // 设置:滑块
   settings:
     '<path d="M5 8h9M18 8h1"/><path d="M5 16h1M10 16h9"/><circle cx="16" cy="8" r="2.2"/><circle cx="8" cy="16" r="2.2"/>',
