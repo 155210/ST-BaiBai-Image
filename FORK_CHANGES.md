@@ -46,6 +46,10 @@
 | src/autoTag/runner.ts | export async function requestSlotTag(floor: number, seq: number, hint = ''): Promise<void> | 单槽重写接收要求 | #6 |
 | src/autoTag/runner.ts | slot: { seq, hint } | 要求放进 slot 选项 | #6 |
 | src/autoTag/runner.ts | withRewriteHint(buildSlotTaskNote(rawSource, slot.seq), slot.hint) | 要求拼进发给 AI 的任务备注 | #6 |
+| src/state/settings.ts | heavyPreset: normalizeHeavyPreset(rt.heavyPreset), | 重型自定义提示词设置字段、默认值与兜底 | #7 |
+| src/autoTag/runner.ts | const attemptMessages = attemptHeavy ? heavy : messages; | 解析失败后剩余重试改发酒馆预设拼装的消息链 | #7 |
+| src/pages/settings/index.vue | <HeavyPresetPanel /> | 设置页挂「重型自定义提示词」面板 | #7 |
+| src/autoTag/prompt.test.ts | heavyPreset: heavyPresetDefaults(), | 测试夹具补新字段 | #7 |
 
 ## 其他本分支改动（不在原作者文件里，或合并时一定会冲突、手动处理）
 
@@ -61,6 +65,7 @@
 - `src/state/backup.ts`、`src/pages/settings/BackupSection.vue`：导出 / 导入设置
 - `src/lightboxNav/`、`src/batch/galleryLightbox.ts`、`src/pages/batch/EmptySlotView.vue`：图片浏览大图左右切换
 - `src/rewriteHint/`：AI 重写提示词时可以写额外要求
+- `src/autoTag/heavyPreset.ts`、`src/pages/settings/HeavyPresetPanel.vue`：解析失败时改用酒馆预设（重型自定义提示词）
 - `src/fork.guard.test.ts`、本文件
 
 ## 合并原作者更新的步骤
