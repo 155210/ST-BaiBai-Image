@@ -17,6 +17,11 @@ import {
   vibeFingerprint,
   vibeMetaFromData,
 } from '@/backends/vibeStore';
+import {
+  heavyPresetDefaults,
+  normalizeHeavyPreset,
+  type HeavyPresetSettings,
+} from '@/autoTag/heavyPreset';
 import { getContext } from '@/st/context';
 import { reactive, watch } from 'vue';
 
@@ -463,6 +468,8 @@ export interface AutoTagSettings {
   autoGenerate: boolean;
   /** 可编辑提示词集(破限/后端规范/思维链);空串 = 回落内置默认。 */
   prompts: AutoTagPrompts;
+  /** 重型自定义提示词(导入的酒馆预设):默认提示词解析失败后,剩余重试改用它(见 autoTag/heavyPreset.ts)。 */
+  heavyPreset: HeavyPresetSettings;
 }
 
 /**
@@ -1204,6 +1211,7 @@ function defaults(): ImageSettings {
         naiThinking: '',
         naiV5Thinking: '',
       },
+      heavyPreset: heavyPresetDefaults(),
     },
     excludes: excludesDefaults(),
     storage: { saveAsJpeg: true },
@@ -1817,6 +1825,7 @@ function normalize(raw: unknown): ImageSettings {
         naiV5Thinking: typeof rp.naiV5Thinking === 'string' ? rp.naiV5Thinking : '',
       };
     })(),
+    heavyPreset: normalizeHeavyPreset(rt.heavyPreset),
   };
   merged.excludes = normalizeExcludes(r.excludes);
   // 存储行为:嵌套对象逐字段兜底(老数据无 storage 键 → 默认关)

@@ -5,6 +5,7 @@ import Collapsible from '@/components/Collapsible.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import Icon from '@/components/Icon.vue';
 import ModalMask from '@/components/ModalMask.vue';
+import HeavyPresetPanel from '@/pages/settings/HeavyPresetPanel.vue';
 import { fetchModels, testChannel } from '@/api/client';
 import {
   BACKENDS,
@@ -864,6 +865,10 @@ async function confirmUpdate() {
             </button>
           </li>
         </ul>
+      </Collapsible>
+
+      <Collapsible title="重型自定义提示词" :open="false">
+        <HeavyPresetPanel />
       </Collapsible>
     </div>
 
