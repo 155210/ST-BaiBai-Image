@@ -6,6 +6,7 @@ import type { Orientation } from '@/backends/size';
 import BbiTextarea from '@/components/BbiTextarea.vue';
 import Icon from '@/components/Icon.vue';
 import ModalMask from '@/components/ModalMask.vue';
+import StreamView from '@/stream/StreamView.vue';
 import { activeOrientationLock } from '@/state/settings';
 import { containsTagMarkup, type ImageTagContent } from '@/st/imageTagRegex';
 
@@ -276,6 +277,8 @@ onBeforeUnmount(() => {
         重写完成后会直接保存并按新提示词出图，结果填回下面的输入框。
         现在关掉这个窗口也不会中断，回头再打开还能看到进度。
       </p>
+      <!-- fork:实时输出(src/stream/) -->
+      <StreamView v-if="rewriting" />
       <!-- 已落盘却没关窗:下面的输入框与「用户自己打了一半」长得一样,不说清哪份已生效,
            用户会以为还得再点一次「应用」(或反过来以为草稿也存了)。 -->
       <p v-else-if="rewritten" class="bbi-editor-note">

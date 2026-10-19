@@ -1047,6 +1047,8 @@ async function confirmUpdate() {
           <span class="bbi-modal-label">流式传输</span>
           <input v-model="editingChannel.stream" type="checkbox" class="bbi-checkbox" />
         </label>
+        <!-- fork:流式说明 -->
+        <span class="bbi-field-hint">开了之后批量页和 AI 重写时能看「实时输出」；超时按多少秒没有新内容算，写得慢但一直在写不会被掐断。</span>
         <label class="bbi-modal-field">
           <span class="bbi-modal-label">排除参数</span>
           <input

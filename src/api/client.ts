@@ -1,5 +1,6 @@
 import { getContext } from '@/st/context';
 import type { ApiChannel } from '@/state/settings';
+import { beginStream } from '@/stream/live';
 import {
   beginLlm,
   failLlm,
@@ -123,7 +124,8 @@ async function withTimeout<T>(
   timeoutSec: number,
   externalSignal: AbortSignal | undefined,
   label: string,
-  task: (signal: AbortSignal) => Promise<T>,
+  task: (signal: AbortSignal, touch: () => void) => Promise<T>,
+  idle = false,
 ): Promise<T> {
   const ctrl = new AbortController();
   let timedOut = false;
@@ -131,15 +133,23 @@ async function withTimeout<T>(
   if (externalSignal?.aborted) onExternalAbort();
   else externalSignal?.addEventListener('abort', onExternalAbort, { once: true });
 
-  const timer = setTimeout(() => {
+  const fire = () => {
     timedOut = true;
     ctrl.abort();
-  }, Math.max(1000, timeoutSec * 1000));
+  };
+  const ms = Math.max(1000, timeoutSec * 1000);
+  let timer = setTimeout(fire, ms);
+  // fork:流式按「多少秒没有新内容」算超时,每收到一块数据就重新计时
+  const touch = () => {
+    if (!idle || timedOut) return;
+    clearTimeout(timer);
+    timer = setTimeout(fire, ms);
+  };
 
   try {
-    return await task(ctrl.signal);
+    return await task(ctrl.signal, touch);
   } catch (e) {
-    if (timedOut) throw new ApiError(`${label}超时(>${timeoutSec}秒)`);
+    if (timedOut) throw new ApiError(idle ? `${label}超时(${timeoutSec}秒没有新内容)` : `${label}超时(>${timeoutSec}秒)`);
     throw e;
   } finally {
     clearTimeout(timer);
@@ -266,7 +276,7 @@ async function requestCompletionAtUrl(
   );
 
   try {
-    const result = await withTimeout(timeoutSec, opts.signal, '副 API 请求', async signal => {
+    const result = await withTimeout(timeoutSec, opts.signal, '副 API 请求', async (signal, touch) => {
       const resp = await fetch(GENERATE_URL, {
         method: 'POST',
         headers: ctx.getRequestHeaders(),
@@ -281,7 +291,19 @@ async function requestCompletionAtUrl(
 
       // 流式:按 SSE 增量拼接;非流式:直接解析 JSON。
       if (stream) {
-        const streamed = await readSseContent(resp);
+        // fork:实时输出面板(src/stream/live.ts)
+        const tap = beginStream(opts.source || '未标注');
+        let streamed = '';
+        try {
+          streamed = await readSseContent(resp, piece => {
+            touch();
+            tap.push(piece);
+          });
+        } catch (e) {
+          tap.end(e instanceof Error ? e.message : String(e));
+          throw e;
+        }
+        tap.end(streamed ? '' : '返回空内容');
         if (!streamed) throw new ApiError('副 API 返回空内容');
         // 流式无 usage:ST 构造上游请求体是字段白名单,不含 stream_options,
         // 没法让上游在末尾回 usage chunk。只能事后本地估算。
@@ -297,7 +319,7 @@ async function requestCompletionAtUrl(
       if (!parsed) throw new ApiError('副 API 返回空内容');
       // ST 代理非流式分支是 response.send(json) 原样透传,故 usage 是上游真值。
       return { content: parsed, usage: readUsage(data) };
-    });
+    }, stream);
 
     // 验收在记历史之前:验收不过 → 落进 catch 记失败,不给「HTTP 成功」的假象
     opts.validate?.(result.content);
@@ -331,7 +353,7 @@ async function requestCompletionAtUrl(
  * 推理模型的思维链增量(delta.reasoning 等)单独缓冲:只有 content 全空时才回退用它,
  * 避免在 content 正常时把思维链混进正文。
  */
-export async function readSseContent(resp: Response): Promise<string> {
+export async function readSseContent(resp: Response, onChunk?: (piece: string) => void): Promise<string> {
   const reader = resp.body?.getReader();
   if (!reader) {
     // 无法流式读取(理论上不会):退回当作整体 JSON 处理
@@ -346,6 +368,8 @@ export async function readSseContent(resp: Response): Promise<string> {
     const { done, value } = await reader.read();
     if (done) break;
     buf += decoder.decode(value, { stream: true });
+    let chunkText = '';
+    let gotData = false;
     // 按行解析,保留最后一段不完整的行到下次
     const lines = buf.split('\n');
     buf = lines.pop() ?? '';
@@ -356,6 +380,7 @@ export async function readSseContent(resp: Response): Promise<string> {
       if (payload === '[DONE]') continue;
       try {
         const json = JSON.parse(payload);
+        gotData = true;
         if (json?.error) throw new ApiError(json.error.message || '副 API 返回错误');
         const choice = json?.choices?.[0];
         const src = choice?.delta ?? choice?.message;
@@ -364,11 +389,14 @@ export async function readSseContent(resp: Response): Promise<string> {
         const reasoningPiece =
           textOf(src?.reasoning) || textOf(src?.reasoning_content) || textOf(src?.thinking);
         if (reasoningPiece) reasoningOut += reasoningPiece;
+        chunkText += reasoningPiece + piece;
       } catch (e) {
         if (e instanceof ApiError) throw e;
         // 单行解析失败忽略(可能是注释行/心跳)
       }
     }
+    // fork:心跳/注释行不算「有新内容」,不给无响应计时续命
+    if (gotData) onChunk?.(chunkText);
   }
   return out.trim() || reasoningOut.trim();
 }
