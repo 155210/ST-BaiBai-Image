@@ -54,7 +54,11 @@ function promptOf(view: SlotView): string {
 
 let closeEmpty: (() => void) | null = null;
 
-function openEmpty(options: GalleryLightboxOptions, view: SlotView, nav: LightboxNav): void {
+/**
+ * 「还没有图」/「重新生成中」画面。regen = 从大图点了「重新生成」:马上开始出图,
+ * 等新图出来(最新一张换了)再切回大图;旧图一直留着,失败了可以回去看旧图。
+ */
+function openEmpty(options: GalleryLightboxOptions, view: SlotView, nav: LightboxNav, regen = false): void {
   const root = document.getElementById(HOST_ID)?.shadowRoot;
   const context = getContext();
   if (!root || !context) return;
@@ -62,6 +66,11 @@ function openEmpty(options: GalleryLightboxOptions, view: SlotView, nav: Lightbo
   const chatId = context.getCurrentChatId?.() ?? '';
   const key = slotKey(chatId, view.floor, view.swipeId, view.seq);
   const state = reactive({ busy: false, busyText: '', error: '' });
+  const latestId = () => {
+    const now = context.chat ? readSlot(context.chat, options.list[options.index]!) : null;
+    return slotImage(now)?.generationId ?? '';
+  };
+  const before = regen ? latestId() : '';
   const container = document.createElement('div');
   root.appendChild(container);
 
@@ -75,8 +84,8 @@ function openEmpty(options: GalleryLightboxOptions, view: SlotView, nav: Lightbo
         ? '排队中…'
         : '生成中…';
     state.error = record?.phase === 'error' ? record.error || '生成失败' : '';
-    const now = context.chat ? readSlot(context.chat, options.list[options.index]!) : null;
-    if (!state.busy && slotImage(now)) openGalleryLightbox({ ...options, entry: undefined });
+    const id = latestId();
+    if (!state.busy && id && id !== before) openGalleryLightbox({ ...options, entry: undefined });
   };
   const timer = setInterval(refresh, 800);
 
@@ -89,6 +98,15 @@ function openEmpty(options: GalleryLightboxOptions, view: SlotView, nav: Lightbo
   };
   closeEmpty = close;
 
+  const generate = () => {
+    state.busy = true;
+    state.busyText = '生成中…';
+    state.error = '';
+    void regenerateSlot(view.floor, view.seq).finally(() => {
+      if (closeEmpty === close) refresh();
+    });
+  };
+
   render(
     h(EmptySlotView, {
       nav,
@@ -96,18 +114,16 @@ function openEmpty(options: GalleryLightboxOptions, view: SlotView, nav: Lightbo
       state,
       prompt: promptOf(view),
       onClose: close,
-      onGenerate: () => {
-        state.busy = true;
-        state.busyText = '生成中…';
-        void regenerateSlot(view.floor, view.seq).finally(() => {
-          if (closeEmpty === close) refresh();
-        });
-      },
+      regen,
+      onGenerate: generate,
       onCancel: () => cancelGen(key),
+      // 重新生成失败或取消后回去看旧图
+      onBack: () => openGalleryLightbox({ ...options, entry: undefined }),
     }),
     container,
   );
-  refresh();
+  if (regen) generate();
+  else refresh();
 }
 
 /* ---------- 入口 ---------- */
@@ -140,6 +156,11 @@ export function openGalleryLightbox(options: GalleryLightboxOptions): void {
     return;
   }
   closeEmpty?.();
+  // 大图上的「重新生成」:和卡片上的 ↻ 同一条路,出完自动换成新图
+  nav.regenerate = () => {
+    closeLightbox();
+    openEmpty(options, view, { ...nav, regenerate: undefined }, true);
+  };
   const characterName = chat[view.floor]?.name || context.name2 || '';
   const target = { floor: view.floor, swipeId: view.swipeId };
   openLightbox({

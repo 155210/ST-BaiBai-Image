@@ -4,4 +4,6 @@ export interface LightboxNav {
   next?: () => void;
   /** 例如「3 / 12」,不给就不显示。 */
   label?: string;
+  /** 给了就在左上角显示「重新生成」。 */
+  regenerate?: () => void;
 }

@@ -46,6 +46,9 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown, true));
     ›
   </button>
   <span v-if="nav.label" class="bbi-lbnav-label" @click.stop>{{ nav.label }}</span>
+  <button v-if="nav.regenerate" class="bbi-lbnav-regen" type="button" title="按现在的提示词重新出一张" @click.stop="nav.regenerate()">
+    ↻ 重新生成
+  </button>
 </template>
 
 <style scoped>
@@ -83,5 +86,18 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown, true));
   background: oklch(0 0 0 / 0.5);
   color: #fff;
   font-size: 13px;
+}
+.bbi-lbnav-regen {
+  position: fixed;
+  top: 60px;
+  left: 16px;
+  z-index: 1;
+  padding: 6px 14px;
+  border: 1px solid var(--bbi-accent);
+  border-radius: var(--bbi-radius-pill);
+  background: oklch(0 0 0 / 0.55);
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
 }
 </style>
