@@ -34,6 +34,18 @@
 | src/floor/Lightbox.vue | <LightboxNavButtons v-if="nav" :nav="nav" /> | 同上：放箭头 | 图片浏览左右切换 |
 | src/floor/lightbox.ts | nav: options.nav, | 同上：传给灯箱 | 图片浏览左右切换 |
 | src/floor/lightbox.ts | export function closeLightbox | 切到没图的卡片时关掉灯箱 | 图片浏览左右切换 |
+| src/floor/PromptEditor.vue | import RewriteHintBox from '@/rewriteHint/RewriteHintBox.vue'; | 引入重写要求输入框 | #6 |
+| src/floor/PromptEditor.vue | const rewriteHint = ref(''); | 重写要求的状态 | #6 |
+| src/floor/PromptEditor.vue | <RewriteHintBox v-model="rewriteHint" | 「AI 重写提示词」按钮上方的输入框 | #6 |
+| src/floor/PromptEditor.vue | (e: 'rewrite', hint: string): void; | rewrite 事件带上要求 | #6 |
+| src/floor/PromptEditor.vue | emit('rewrite', rewriteHint.value); | 点重写时发出要求 | #6 |
+| src/floor/promptEditor.ts | const rewrite = (hint = ''): void => | 弹窗回调接收要求 | #6 |
+| src/floor/promptEditor.ts | const startRewrite = (hint = ''): void => | 确认后继续带着要求 | #6 |
+| src/floor/promptEditor.ts | requestSlotTag(options.at.messageId, options.at.seq, hint) | 要求交给 runner | #6 |
+| src/autoTag/runner.ts | import { withRewriteHint } from '@/rewriteHint/hint'; | 引入拼接函数 | #6 |
+| src/autoTag/runner.ts | export async function requestSlotTag(floor: number, seq: number, hint = ''): Promise<void> | 单槽重写接收要求 | #6 |
+| src/autoTag/runner.ts | slot: { seq, hint } | 要求放进 slot 选项 | #6 |
+| src/autoTag/runner.ts | withRewriteHint(buildSlotTaskNote(rawSource, slot.seq), slot.hint) | 要求拼进发给 AI 的任务备注 | #6 |
 
 ## 其他本分支改动（不在原作者文件里，或合并时一定会冲突、手动处理）
 
@@ -48,6 +60,7 @@
 - `src/floor/slotGenerate.ts`：单张出图（卡片与批量共用）
 - `src/state/backup.ts`、`src/pages/settings/BackupSection.vue`：导出 / 导入设置
 - `src/lightboxNav/`、`src/batch/galleryLightbox.ts`、`src/pages/batch/EmptySlotView.vue`：图片浏览大图左右切换
+- `src/rewriteHint/`：AI 重写提示词时可以写额外要求
 - `src/fork.guard.test.ts`、本文件
 
 ## 合并原作者更新的步骤
