@@ -12,7 +12,8 @@ import { getContext } from '@/st/context';
 import { formatPromptText } from '@/st/imageTagRegex';
 
 /**
- * 图片浏览里点开大图:两侧有「上一张 / 下一张」,按当前筛选和顺序在卡片之间切换,翻页也跟着走。
+ * 图片浏览里点开大图:两侧大箭头按当前筛选和顺序在卡片之间切换,翻页也跟着走;
+ * 左上角小箭头切同一张卡片出过的几次图,「⋯」里能只删现在看的这一次。
  * 切到还没有图的卡片时显示「还没有图」和生成按钮,生成好了自动换成大图。
  */
 
@@ -161,13 +162,35 @@ export function openGalleryLightbox(options: GalleryLightboxOptions): void {
     closeLightbox();
     openEmpty(options, view, { ...nav, regenerate: undefined }, true);
   };
+  // 同一张卡片的历史 roll:小箭头在左上角,和切卡片的两侧大箭头分开
+  const rolls = view.history.length ? view.history : [entry];
+  const at = Math.max(0, rolls.findIndex(item => item.generationId === entry.generationId));
+  const showRoll = (target: number) => () => openGalleryLightbox({ ...options, entry: rolls[target] });
+  nav.rolls = {
+    index: at,
+    total: rolls.length,
+    prev: at > 0 ? showRoll(at - 1) : undefined,
+    next: at < rolls.length - 1 ? showRoll(at + 1) : undefined,
+  };
+  // 删除收进「⋯」:只删现在看的这一次,删完留在这张卡片上
+  nav.menu = [
+    {
+      label: rolls.length > 1 ? `删除这一次（第 ${at + 1}/${rolls.length} 次）` : '删除这张图',
+      danger: true,
+      action: () => {
+        closeLightbox();
+        void deleteSlotImage(view.floor, view.swipeId, entry).then(() =>
+          openGalleryLightbox({ list, index, onShow: options.onShow }),
+        );
+      },
+    },
+  ];
   const characterName = chat[view.floor]?.name || context.name2 || '';
-  const target = { floor: view.floor, swipeId: view.swipeId };
   openLightbox({
     src: entry.path,
     prompt: [promptOf(view), entry.meta ? formatGenerationMeta(entry.meta) : ''].filter(Boolean).join('\n\n'),
     filename: imageDownloadFileName(entry.path, characterName, entry.generationId),
-    onDelete: () => void deleteSlotImage(target.floor, target.swipeId, entry),
+    // 不给 onDelete:作者灯箱栏上的垃圾桶不显示,删除只在「⋯」里
     nav,
   });
 }
