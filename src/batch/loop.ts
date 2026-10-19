@@ -1,8 +1,9 @@
 import type { TagRunOutcome } from '@/autoTag/runner';
-import type { BatchTagJob } from '@/batch/jobStore';
+import type { BatchJob } from '@/batch/jobStore';
 
 /**
- * 批量写 tag 的主循环。外部依赖全部从 deps 注入,便于测试;真实接线见 batch/tagBatch.ts。
+ * 批量主循环(写 tag 与出图共用):逐楼调用 runFloor,计数、存进度、处理后台与停止。
+ * 外部依赖全部从 deps 注入,便于测试;真实接线见 batch/controller.ts。
  *
  * 纪律:
  * - **一次只跑一楼**。柏宝绘按「本楼之前的楼」推导角色库,并发会让同一角色被重复建档;
@@ -13,21 +14,21 @@ import type { BatchTagJob } from '@/batch/jobStore';
  * - 连续失败到上限就暂停(多半是渠道挂了),免得把剩下的楼全记成失败。
  */
 
-export interface TagLoopDeps {
+export interface LoopDeps {
   runFloor: (floor: number) => Promise<TagRunOutcome>;
   currentChatId: () => string;
-  /** 这一楼现在还该不该跑(AI 剧情楼且还没有 tag)。开跑后用户可能手动写过。 */
+  /** 这一楼现在还该不该跑(写 tag:AI 楼且没 tag;出图:有没图的 tag)。开跑后用户可能手动处理过。 */
   isEligible: (floor: number) => boolean;
   /** 页面是否在后台。 */
   isHidden: () => boolean;
   /** 等页面回到前台;被停止时提前返回。 */
   waitVisible: (signal: AbortSignal) => Promise<void>;
   sleep: (ms: number, signal: AbortSignal) => Promise<void>;
-  persist: (job: BatchTagJob) => void;
-  onProgress?: (job: BatchTagJob, floor: number, outcome: TagRunOutcome | null) => void;
+  persist: (job: BatchJob) => void;
+  onProgress?: (job: BatchJob, floor: number, outcome: TagRunOutcome | null) => void;
 }
 
-export interface TagLoopOptions {
+export interface LoopOptions {
   /** 每楼之间的间隔(毫秒)。 */
   gapMs: number;
   /** 连续失败几楼就暂停。 */
@@ -36,18 +37,18 @@ export interface TagLoopOptions {
   maxHiddenRetries: number;
 }
 
-export const DEFAULT_LOOP_OPTIONS: TagLoopOptions = {
+export const DEFAULT_LOOP_OPTIONS: LoopOptions = {
   gapMs: 2000,
   maxConsecutiveFails: 3,
   maxHiddenRetries: 3,
 };
 
-export async function runTagLoop(
-  job: BatchTagJob,
-  deps: TagLoopDeps,
+export async function runBatchLoop(
+  job: BatchJob,
+  deps: LoopDeps,
   signal: AbortSignal,
-  options: TagLoopOptions = DEFAULT_LOOP_OPTIONS,
-): Promise<BatchTagJob> {
+  options: LoopOptions = DEFAULT_LOOP_OPTIONS,
+): Promise<BatchJob> {
   job.status = 'running';
   job.note = '';
   deps.persist(job);
@@ -101,7 +102,7 @@ export async function runTagLoop(
     deps.onProgress?.(job, floor, outcome);
 
     if (consecutiveFails >= options.maxConsecutiveFails) {
-      return pause(job, deps, `连续 ${consecutiveFails} 楼失败，已暂停。检查一下副 API 渠道，再点继续`);
+      return pause(job, deps, `连续 ${consecutiveFails} 楼失败，已暂停。检查一下渠道设置，再点继续`);
     }
     if (job.cursor < job.floors.length && options.gapMs > 0) await deps.sleep(options.gapMs, signal);
   }
@@ -113,7 +114,7 @@ export async function runTagLoop(
 }
 
 /** 记下一楼的结果并前进一格。 */
-function record(job: BatchTagJob, floor: number, outcome: TagRunOutcome): void {
+function record(job: BatchJob, floor: number, outcome: TagRunOutcome): void {
   if (outcome.kind === 'written') {
     job.written++;
     job.touched.push(floor);
@@ -129,7 +130,7 @@ function record(job: BatchTagJob, floor: number, outcome: TagRunOutcome): void {
   job.cursor++;
 }
 
-function pause(job: BatchTagJob, deps: TagLoopDeps, note: string): BatchTagJob {
+function pause(job: BatchJob, deps: LoopDeps, note: string): BatchJob {
   job.status = 'paused';
   job.note = note;
   deps.persist(job);

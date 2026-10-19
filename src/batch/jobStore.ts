@@ -10,8 +10,12 @@ export interface BatchFail {
   reason: string;
 }
 
-export interface BatchTagJob {
+/** tag = 批量写生图 tag;image = 批量给没图的 tag 出图。两种各记各的。 */
+export type BatchKind = 'tag' | 'image';
+
+export interface BatchJob {
   version: 1;
+  kind: BatchKind;
   chatId: string;
   /** 本次要跑的楼(开跑时定下,升序)。 */
   floors: number[];
@@ -21,7 +25,7 @@ export interface BatchTagJob {
   none: number;
   skipped: number;
   fails: BatchFail[];
-  /** 本次写入过 tag 的楼:收尾时逐楼核对是否已存到服务器。 */
+  /** 本次写入过(tag 或图片指针)的楼:收尾时逐楼核对是否已存到服务器。 */
   touched: number[];
   status: 'running' | 'paused' | 'done';
   /** 暂停/结束的原因(给人看)。 */
@@ -29,52 +33,57 @@ export interface BatchTagJob {
   updatedAt: number;
 }
 
-const STORE_KEY = 'bbi_batch_tag_jobs_v1';
+const STORE_KEYS: Record<BatchKind, string> = {
+  tag: 'bbi_batch_tag_jobs_v1',
+  image: 'bbi_batch_image_jobs_v1',
+};
 /** 最多记几个聊天,多了丢最旧的。 */
 const MAX_JOBS = 20;
 
-function readAll(): Record<string, BatchTagJob> {
+function readAll(kind: BatchKind): Record<string, BatchJob> {
   try {
-    const raw = localStorage.getItem(STORE_KEY);
+    const raw = localStorage.getItem(STORE_KEYS[kind]);
     const parsed = raw ? (JSON.parse(raw) as unknown) : null;
-    return parsed && typeof parsed === 'object' ? (parsed as Record<string, BatchTagJob>) : {};
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, BatchJob>) : {};
   } catch {
     return {};
   }
 }
 
-function writeAll(all: Record<string, BatchTagJob>): void {
+function writeAll(kind: BatchKind, all: Record<string, BatchJob>): void {
   try {
     const entries = Object.entries(all).sort((left, right) => right[1].updatedAt - left[1].updatedAt);
-    localStorage.setItem(STORE_KEY, JSON.stringify(Object.fromEntries(entries.slice(0, MAX_JOBS))));
+    localStorage.setItem(STORE_KEYS[kind], JSON.stringify(Object.fromEntries(entries.slice(0, MAX_JOBS))));
   } catch {
     /* 存不下就算了:只影响续跑 */
   }
 }
 
-export function loadJob(chatId: string): BatchTagJob | null {
+export function loadJob(kind: BatchKind, chatId: string): BatchJob | null {
   if (!chatId) return null;
-  const job = readAll()[chatId];
-  return job && job.version === 1 && Array.isArray(job.floors) ? job : null;
+  const job = readAll(kind)[chatId];
+  // 早期记录没有 kind 字段:按所在的表补上
+  return job && job.version === 1 && Array.isArray(job.floors) ? { ...job, kind } : null;
 }
 
-export function saveJob(job: BatchTagJob): void {
+export function saveJob(job: BatchJob): void {
   if (!job.chatId) return;
-  const all = readAll();
+  const all = readAll(job.kind);
   all[job.chatId] = { ...job, updatedAt: Date.now() };
-  writeAll(all);
+  writeAll(job.kind, all);
 }
 
-export function clearJob(chatId: string): void {
-  const all = readAll();
+export function clearJob(kind: BatchKind, chatId: string): void {
+  const all = readAll(kind);
   if (!(chatId in all)) return;
   delete all[chatId];
-  writeAll(all);
+  writeAll(kind, all);
 }
 
-export function createJob(chatId: string, floors: number[]): BatchTagJob {
+export function createJob(kind: BatchKind, chatId: string, floors: number[]): BatchJob {
   return {
     version: 1,
+    kind,
     chatId,
     floors,
     cursor: 0,

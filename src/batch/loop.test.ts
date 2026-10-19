@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { TagRunOutcome } from '@/autoTag/runner';
-import { createJob, type BatchTagJob } from '@/batch/jobStore';
-import { runTagLoop, type TagLoopDeps } from '@/batch/tagLoop';
+import { createJob, type BatchJob } from '@/batch/jobStore';
+import { runBatchLoop, type LoopDeps } from '@/batch/loop';
 
 const OPTIONS = { gapMs: 0, maxConsecutiveFails: 3, maxHiddenRetries: 2 };
 
-function deps(overrides: Partial<TagLoopDeps> = {}): TagLoopDeps {
+function deps(overrides: Partial<LoopDeps> = {}): LoopDeps {
   return {
     runFloor: async () => ({ kind: 'written' }),
     currentChatId: () => 'chat',
@@ -30,12 +30,12 @@ function outcomes(map: Record<number, TagRunOutcome | TagRunOutcome[]>) {
   };
 }
 
-describe('runTagLoop', () => {
+describe('runBatchLoop', () => {
   it('runs floors in order and tallies each outcome', async () => {
     const order: number[] = [];
-    const job = createJob('chat', [1, 3, 5, 7]);
+    const job = createJob('tag', 'chat', [1, 3, 5, 7]);
     const run = outcomes({ 3: { kind: 'none' }, 5: { kind: 'failed', reason: 'boom' }, 7: { kind: 'skipped' } });
-    await runTagLoop(
+    await runBatchLoop(
       job,
       deps({ runFloor: floor => (order.push(floor), run(floor)) }),
       new AbortController().signal,
@@ -48,22 +48,22 @@ describe('runTagLoop', () => {
 
   it('skips floors that stopped being eligible without calling the runner', async () => {
     const runFloor = vi.fn(async (): Promise<TagRunOutcome> => ({ kind: 'written' }));
-    const job = createJob('chat', [1, 2]);
-    await runTagLoop(job, deps({ runFloor, isEligible: floor => floor !== 1 }), new AbortController().signal, OPTIONS);
+    const job = createJob('tag', 'chat', [1, 2]);
+    await runBatchLoop(job, deps({ runFloor, isEligible: floor => floor !== 1 }), new AbortController().signal, OPTIONS);
     expect(runFloor).toHaveBeenCalledTimes(1);
     expect(job).toMatchObject({ skipped: 1, written: 1, cursor: 2 });
   });
 
   it('persists after every floor so a killed page resumes at the next one', async () => {
     const cursors: number[] = [];
-    const job = createJob('chat', [1, 2, 3]);
-    await runTagLoop(job, deps({ persist: saved => cursors.push(saved.cursor) }), new AbortController().signal, OPTIONS);
+    const job = createJob('tag', 'chat', [1, 2, 3]);
+    await runBatchLoop(job, deps({ persist: saved => cursors.push(saved.cursor) }), new AbortController().signal, OPTIONS);
     expect(cursors).toEqual([0, 1, 2, 3, 3]);
   });
 
   it('pauses after too many consecutive failures', async () => {
-    const job = createJob('chat', [1, 2, 3, 4, 5]);
-    await runTagLoop(
+    const job = createJob('tag', 'chat', [1, 2, 3, 4, 5]);
+    await runBatchLoop(
       job,
       deps({ runFloor: async () => ({ kind: 'failed', reason: 'down' }) }),
       new AbortController().signal,
@@ -75,9 +75,9 @@ describe('runTagLoop', () => {
   });
 
   it('a success resets the consecutive failure count', async () => {
-    const job = createJob('chat', [1, 2, 3, 4, 5]);
+    const job = createJob('tag', 'chat', [1, 2, 3, 4, 5]);
     const failed: TagRunOutcome = { kind: 'failed' };
-    await runTagLoop(job, deps({ runFloor: outcomes({ 1: failed, 2: failed, 4: failed, 5: failed }) }), new AbortController().signal, OPTIONS);
+    await runBatchLoop(job, deps({ runFloor: outcomes({ 1: failed, 2: failed, 4: failed, 5: failed }) }), new AbortController().signal, OPTIONS);
     expect(job.status).toBe('done');
     expect(job.fails.map(item => item.floor)).toEqual([1, 2, 4, 5]);
   });
@@ -94,8 +94,8 @@ describe('runTagLoop', () => {
       }
       return { kind: 'written' };
     });
-    const job = createJob('chat', [1, 2, 3]);
-    await runTagLoop(job, deps({ runFloor, isHidden: () => hidden, waitVisible }), new AbortController().signal, OPTIONS);
+    const job = createJob('tag', 'chat', [1, 2, 3]);
+    await runBatchLoop(job, deps({ runFloor, isHidden: () => hidden, waitVisible }), new AbortController().signal, OPTIONS);
     expect(runFloor.mock.calls.map(([floor]) => floor)).toEqual([1, 2, 2, 3]);
     expect(waitVisible).toHaveBeenCalled();
     expect(job).toMatchObject({ status: 'done', written: 3, fails: [] });
@@ -103,8 +103,8 @@ describe('runTagLoop', () => {
 
   it('stops without recording the in-flight floor when aborted, and resumes from it', async () => {
     const controller = new AbortController();
-    const job: BatchTagJob = createJob('chat', [1, 2, 3]);
-    await runTagLoop(
+    const job: BatchJob = createJob('tag', 'chat', [1, 2, 3]);
+    await runBatchLoop(
       job,
       deps({
         runFloor: async floor => {
@@ -120,14 +120,14 @@ describe('runTagLoop', () => {
     );
     expect(job).toMatchObject({ status: 'paused', cursor: 1, note: '已停止', fails: [] });
 
-    await runTagLoop(job, deps(), new AbortController().signal, OPTIONS);
+    await runBatchLoop(job, deps(), new AbortController().signal, OPTIONS);
     expect(job).toMatchObject({ status: 'done', cursor: 3, touched: [1, 2, 3] });
   });
 
   it('still records a floor that finished writing just as the stop came in', async () => {
     const controller = new AbortController();
-    const job = createJob('chat', [1, 2]);
-    await runTagLoop(
+    const job = createJob('tag', 'chat', [1, 2]);
+    await runBatchLoop(
       job,
       deps({
         runFloor: async () => {
@@ -143,8 +143,8 @@ describe('runTagLoop', () => {
 
   it('pauses when the chat changes', async () => {
     let chatId = 'chat';
-    const job = createJob('chat', [1, 2, 3]);
-    await runTagLoop(
+    const job = createJob('tag', 'chat', [1, 2, 3]);
+    await runBatchLoop(
       job,
       deps({
         currentChatId: () => chatId,
