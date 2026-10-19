@@ -6,6 +6,7 @@ import type { Orientation } from '@/backends/size';
 import BbiTextarea from '@/components/BbiTextarea.vue';
 import Icon from '@/components/Icon.vue';
 import ModalMask from '@/components/ModalMask.vue';
+import RewriteHintBox from '@/rewriteHint/RewriteHintBox.vue';
 import { activeOrientationLock } from '@/state/settings';
 import { containsTagMarkup, type ImageTagContent } from '@/st/imageTagRegex';
 
@@ -51,8 +52,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   /** 应用;regenerate=true 表示写回后直接开跑出图。 */
   (e: 'apply', value: ImageTagContent, regenerate: boolean): void;
-  /** 请求 AI 重写这一张的提示词(落盘与出图由调用方做,本组件只负责把结果读回草稿)。 */
-  (e: 'rewrite'): void;
+  /** 请求 AI 重写这一张的提示词(落盘与出图由调用方做,本组件只负责把结果读回草稿)。
+   *  hint:fork 附加的重写要求(见 rewriteHint/),空串 = 照旧。 */
+  (e: 'rewrite', hint: string): void;
   /** 取消在途的 AI 重写。 */
   (e: 'cancel-rewrite'): void;
   /** 草稿是否已改动(调用方据此决定关窗前要不要问「放弃修改?」)。 */
@@ -74,6 +76,8 @@ const size = ref<Orientation>(props.content.size);
 const characters = ref<ImageCharacterPrompt[]>(
   props.content.characters.map(character => ({ ...character })),
 );
+/** fork:给 AI 的重写要求(rewriteHint/)。不进草稿、不算 dirty,重写完也留着方便再试。 */
+const rewriteHint = ref('');
 
 /**
  * 当前渠道的画幅锁(null = 未锁,见 settings.ts 的 activeOrientationLock)。
@@ -187,7 +191,7 @@ function apply(regenerate: boolean): void {
 
 function rewrite(): void {
   if (props.busy || props.rewriting || !props.configured) return;
-  emit('rewrite');
+  emit('rewrite', rewriteHint.value);
 }
 
 /**
@@ -248,6 +252,7 @@ onBeforeUnmount(() => {
       <!-- AI 重写:手改与 AI 改是同一件事的两种手段,故聚在同一个弹窗里。
            跑完直接落盘并出图(见 promptEditor.ts),结果回填到下面的输入框。 -->
       <div class="bbi-rewrite-row">
+        <RewriteHintBox v-model="rewriteHint" :disabled="busy || rewriting || !configured" />
         <button
           v-if="!rewriting"
           class="bbi-btn bbi-btn-sm"

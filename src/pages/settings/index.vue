@@ -34,6 +34,7 @@ import {
 } from '@/state/ui';
 import { checkForUpdate, performUpdate, updateState } from '@/update';
 import { computed, nextTick, onMounted, ref } from 'vue';
+import BackupSection from './BackupSection.vue';
 
 const NAV_OPTIONS: { value: NavPosition; label: string }[] = [
   { value: 'auto', label: '自动' },
@@ -870,6 +871,8 @@ async function confirmUpdate() {
       <Collapsible title="重型自定义提示词" :open="false">
         <HeavyPresetPanel />
       </Collapsible>
+
+      <BackupSection />
     </div>
 
     <!-- ===== 排除角色弹窗:搜索 + 勾选列表 ===== -->

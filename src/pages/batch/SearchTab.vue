@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 
-import { searchNames, splitNames, stripTagList, type SearchResult } from '@/batch/search';
+import { searchNames, searchState, splitNames, stripTagList } from '@/batch/search';
 import { charTagLib } from '@/state/charTags';
 import { settings } from '@/state/settings';
 import { getContext } from '@/st/context';
@@ -9,6 +9,7 @@ import SearchHits from './SearchHits.vue';
 
 /**
  * 批量页「角色搜索」:名字在本聊天哪些楼出现过。逻辑在 batch/search.ts。
+ * 搜索框与结果存在 searchState(模块里),切走再回来还在;
  * 「额外排除标签」记在浏览器本地,不进插件设置。
  */
 
@@ -24,11 +25,7 @@ function readStrip(): string {
   }
 }
 
-const query = ref('');
-const withUser = ref(false);
 const extraStrip = ref(readStrip());
-const result = ref<SearchResult | null>(null);
-const searched = ref<string[]>([]);
 
 watch(extraStrip, value => {
   try {
@@ -38,31 +35,34 @@ watch(extraStrip, value => {
   }
 });
 
-// 换了聊天,旧结果的楼号就对不上了
+// 换了聊天,旧结果的楼号就对不上了:有搜过就按同样的名字重搜一遍
 watch(
   () => props.chatTick,
   () => {
-    result.value = null;
+    if (!searchState.result) return;
+    const chat = getContext()?.chat;
+    if (chat) run(searchState.names, true);
+    else searchState.result = null;
   },
 );
 
-function run(names: string[]): void {
+function run(names: string[], quiet = false): void {
   if (!names.length) {
-    toastr.warning('先输入角色名', '柏宝绘');
+    if (!quiet) toastr.warning('先输入角色名', '柏宝绘');
     return;
   }
   const chat = getContext()?.chat;
   if (!chat) {
-    toastr.warning('先打开一个聊天', '柏宝绘');
+    if (!quiet) toastr.warning('先打开一个聊天', '柏宝绘');
     return;
   }
   const stripTags = stripTagList(settings.excludes.customStripTags, splitNames(extraStrip.value));
-  searched.value = [...new Set(names)];
-  result.value = searchNames(chat, names, { withUser: withUser.value, stripTags });
+  searchState.names = [...new Set(names)];
+  searchState.result = searchNames(chat, names, { withUser: searchState.withUser, stripTags });
 }
 
 function search(): void {
-  run(splitNames(query.value));
+  run(splitNames(searchState.query));
 }
 
 function searchLibrary(): void {
@@ -71,7 +71,7 @@ function searchLibrary(): void {
     toastr.info('柏宝绘角色库是空的', '柏宝绘');
     return;
   }
-  query.value = names.join(', ');
+  searchState.query = names.join(', ');
   run(names);
 }
 </script>
@@ -82,7 +82,7 @@ function searchLibrary(): void {
       <span class="bbi-field-label">角色名</span>
       <div class="bbi-search-row">
         <input
-          v-model="query"
+          v-model="searchState.query"
           class="bbi-input"
           type="search"
           enterkeyhint="search"
@@ -91,7 +91,7 @@ function searchLibrary(): void {
         />
         <button class="bbi-btn bbi-btn-primary" type="button" @click="search">搜索</button>
       </div>
-      <p class="bbi-field-hint">搜索不看上面的楼层范围，总是搜整个聊天。</p>
+      <p class="bbi-field-hint">搜索总是搜整个聊天，不看楼层范围。</p>
     </div>
 
     <div class="bbi-search-row">
@@ -100,7 +100,7 @@ function searchLibrary(): void {
 
     <label class="bbi-switch-row">
       <span class="bbi-field-label">也搜用户楼</span>
-      <input v-model="withUser" class="bbi-checkbox" type="checkbox" />
+      <input v-model="searchState.withUser" class="bbi-checkbox" type="checkbox" />
     </label>
 
     <div class="bbi-field">
@@ -111,15 +111,16 @@ function searchLibrary(): void {
       </p>
     </div>
 
-    <div v-if="result" class="bbi-search-result">
+    <div v-if="searchState.result" class="bbi-search-result">
       <p class="bbi-search-sum">
-        搜了 {{ searched.length }} 个名字，找到 {{ result.rows.filter(row => row.floors.length).length }} 个
+        搜了 {{ searchState.names.length }} 个名字，找到
+        {{ searchState.result.rows.filter(row => row.floors.length).length }} 个
       </p>
-      <SearchHits v-for="row in result.rows" :key="row.name" :title="row.name" :floors="row.floors" />
+      <SearchHits v-for="row in searchState.result.rows" :key="row.name" :title="row.name" :floors="row.floors" />
       <SearchHits
-        v-if="searched.length > 1"
-        :title="`同时出现：${searched.join(' + ')}`"
-        :floors="result.together"
+        v-if="searchState.names.length > 1"
+        :title="`同时出现：${searchState.names.join(' + ')}`"
+        :floors="searchState.result.together"
         none="没有哪一楼同时出现这些名字"
       />
     </div>
