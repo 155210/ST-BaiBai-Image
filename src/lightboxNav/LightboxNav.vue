@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 
-import type { LightboxNav } from './types';
+import type { LightboxNav, LightboxStatus } from './types';
 
 /**
  * 灯箱上的切换与操作(本 fork 新增,挂在作者的 Lightbox.vue 里)。
@@ -13,6 +13,13 @@ import type { LightboxNav } from './types';
 const props = defineProps<{ nav: LightboxNav }>();
 const menuOpen = ref(false);
 
+// 生成状态不归灯箱管(在 genState 里),开着时定时问一下
+const status = ref<LightboxStatus | null>(null);
+let timer: ReturnType<typeof setInterval> | undefined;
+function poll(): void {
+  status.value = props.nav.poll?.() ?? null;
+}
+
 function onKeydown(event: KeyboardEvent): void {
   const target = event.target as HTMLElement | null;
   if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
@@ -23,8 +30,17 @@ function onKeydown(event: KeyboardEvent): void {
   go();
 }
 
-onMounted(() => document.addEventListener('keydown', onKeydown, true));
-onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown, true));
+onMounted(() => {
+  document.addEventListener('keydown', onKeydown, true);
+  if (props.nav.poll) {
+    poll();
+    timer = setInterval(poll, 800);
+  }
+});
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', onKeydown, true);
+  clearInterval(timer);
+});
 </script>
 
 <template>
@@ -55,7 +71,11 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown, true));
       <span>第 {{ nav.rolls.index + 1 }}/{{ nav.rolls.total }} 次</span>
       <button type="button" aria-label="这张卡片的下一次" :disabled="!nav.rolls.next" @click="nav.rolls.next?.()">›</button>
     </span>
-    <span class="bbi-lbnav-row">
+    <span v-if="status" class="bbi-lbnav-row">
+      <span class="bbi-lbnav-status" :class="{ 'is-error': status.error }">{{ status.text }}</span>
+      <button v-if="status.cancel" class="bbi-lbnav-pill" type="button" @click="status.cancel()">取消</button>
+    </span>
+    <span v-if="!status || status.error" class="bbi-lbnav-row">
       <button v-if="nav.regenerate" class="bbi-lbnav-pill is-accent" type="button" title="按现在的提示词重新出一张" @click="nav.regenerate()">
         ↻ 重新生成
       </button>
@@ -70,7 +90,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown, true));
         {{ menuOpen ? '收起 ▴' : '⋯' }}
       </button>
     </span>
-    <span v-if="menuOpen && nav.menu?.length" class="bbi-lbnav-row">
+    <span v-if="menuOpen && nav.menu?.length && (!status || status.error)" class="bbi-lbnav-row">
       <button
         v-for="item in nav.menu"
         :key="item.label"
@@ -163,6 +183,18 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown, true));
   color: #fff;
   font-size: 13px;
   cursor: pointer;
+}
+.bbi-lbnav-status {
+  padding: 6px 14px;
+  border-radius: var(--bbi-radius-pill);
+  background: oklch(0 0 0 / 0.55);
+  color: #fff;
+  font-size: 13px;
+}
+.bbi-lbnav-status.is-error {
+  max-width: 70vw;
+  background: oklch(0.45 0.15 25 / 0.85);
+  word-break: break-all;
 }
 .bbi-lbnav-pill.is-accent {
   border-color: var(--bbi-accent);

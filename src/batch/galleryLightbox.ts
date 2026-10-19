@@ -1,6 +1,6 @@
 import { h, reactive, render } from 'vue';
 
-import { deleteSlotImage, readSlot, regenerateSlot, type GallerySlot, type SlotView } from '@/batch/gallery';
+import { busyLabel, deleteSlotImage, readSlot, regenerateSlot, type GallerySlot, type SlotView } from '@/batch/gallery';
 import { imageDownloadFileName } from '@/floor/download';
 import { cancelGen, getGenRecord, slotKey } from '@/floor/genState';
 import { closeLightbox, openLightbox } from '@/floor/lightbox';
@@ -79,11 +79,7 @@ function openEmpty(options: GalleryLightboxOptions, view: SlotView, nav: Lightbo
   const refresh = () => {
     const record = getGenRecord(key);
     state.busy = record?.phase === 'queued' || record?.phase === 'generating';
-    state.busyText = record?.retry
-      ? `受限，等第 ${record.retry.attempt}/${record.retry.max} 次重试`
-      : record?.phase === 'queued'
-        ? '排队中…'
-        : '生成中…';
+    state.busyText = busyLabel(record) || '生成中…';
     state.error = record?.phase === 'error' ? record.error || '生成失败' : '';
     const id = latestId();
     if (!state.busy && id && id !== before) openGalleryLightbox({ ...options, entry: undefined });
@@ -185,6 +181,26 @@ export function openGalleryLightbox(options: GalleryLightboxOptions): void {
       },
     },
   ];
+  // 这张卡片正在生成(从聊天楼层、卡片或批量发起的都算):左上显示进度和取消,出完换成新图
+  const key = slotKey(context.getCurrentChatId?.() ?? '', view.floor, view.swipeId, view.seq);
+  const before = slotImage(view)?.generationId ?? '';
+  let waiting = false;
+  nav.poll = () => {
+    const record = getGenRecord(key);
+    if (record?.phase === 'queued' || record?.phase === 'generating') {
+      waiting = true;
+      return { text: busyLabel(record), cancel: () => cancelGen(key) };
+    }
+    if (waiting) {
+      waiting = false;
+      const now = slotImage(readSlot(getContext()?.chat ?? [], slot));
+      if (now && now.generationId !== before) {
+        openGalleryLightbox({ list, index, onShow: options.onShow });
+        return null;
+      }
+    }
+    return record?.phase === 'error' ? { text: `生成失败：${record.error || '未知原因'}`, error: true } : null;
+  };
   const characterName = chat[view.floor]?.name || context.name2 || '';
   openLightbox({
     src: entry.path,

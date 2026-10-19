@@ -10,4 +10,15 @@ export interface LightboxNav {
   rolls?: { index: number; total: number; prev?: () => void; next?: () => void };
   /** 「⋯」里收起来的操作(比如删除),点开才看得到,防误触。 */
   menu?: { label: string; danger?: boolean; action: () => void }[];
+  /**
+   * 灯箱开着时每 800ms 调一次,返回这张卡片的生成状态(生成中 / 排队中 / 失败);
+   * 返回 null 表示没在生成。生成中时「重新生成」和「⋯」先收起来。
+   */
+  poll?: () => LightboxStatus | null;
+}
+
+export interface LightboxStatus {
+  text: string;
+  error?: boolean;
+  cancel?: () => void;
 }

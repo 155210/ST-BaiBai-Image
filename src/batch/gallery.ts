@@ -1,6 +1,6 @@
 import { slotImageState, slotJob, type SlotImageState } from '@/batch/imageFloor';
 import { backendStatus } from '@/generate';
-import { getGenRecord, slotKey } from '@/floor/genState';
+import { getGenRecord, slotKey, type GenRecord } from '@/floor/genState';
 import { generateSlot } from '@/floor/slotGenerate';
 import { confirmImageMissing, isImageMissing } from '@/floor/missingImages';
 import { confirmDialog } from '@/components/confirm';
@@ -140,6 +140,13 @@ export async function jumpToFloor(floor: number): Promise<void> {
     console.warn('[柏宝绘] 跳转楼层失败', error);
     toastr.warning(`没能跳到第 ${floor} 楼`, '柏宝绘');
   }
+}
+
+/** 卡片和大图上显示的进度字样。 */
+export function busyLabel(record: GenRecord | undefined): string {
+  if (!record) return '';
+  if (record.retry) return `受限，等第 ${record.retry.attempt}/${record.retry.max} 次重试`;
+  return record.phase === 'queued' ? '排队中…' : '生成中…';
 }
 
 /** 生成中 / 排队中:这时不能再点重roll 或编辑。 */
