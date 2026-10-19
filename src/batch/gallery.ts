@@ -28,6 +28,8 @@ export interface GallerySlot {
 }
 
 export type GalleryFilter = 'all' | SlotImageState;
+/** asc = 楼层正序;desc = 楼层倒序;recent = 最近出图的在前(重新生成过的会排到最前)。 */
+export type GalleryOrder = 'asc' | 'desc' | 'recent';
 export type GallerySize = 'l' | 'm' | 's';
 
 /** 大 = 一行 1 张,中 = 一行 2 张,小 = 一行 3 张;每页张数随档位变。 */
@@ -83,14 +85,38 @@ export function readSlot(chat: STMessage[], slot: GallerySlot): SlotView | null 
   };
 }
 
+/**
+ * 这个槽位最近一次出图的时间(不论新旧提示词,文件还在的才算);没有图返回 0。
+ * 只读 extra 里的记录,不解析 tag,2000 张卡片每次重算也不卡。
+ */
+export function slotLatestAt(chat: STMessage[], slot: GallerySlot): number {
+  const message = chat[slot.floor];
+  const bucket = message ? readStore(message)?.[String(message.swipe_id ?? 0)] : undefined;
+  let latest = 0;
+  for (const list of Object.values(bucket ?? {})) {
+    if (!Array.isArray(list)) continue;
+    for (const entry of list) {
+      if ((entry.slotSeq ?? 0) !== slot.seq || !entry.path || isImageMissing(entry.path)) continue;
+      if (entry.createdAt > latest) latest = entry.createdAt;
+    }
+  }
+  return latest;
+}
+
 export function filterSlots(
   chat: STMessage[],
   slots: GallerySlot[],
   filter: GalleryFilter,
-  reverse: boolean,
+  order: GalleryOrder,
 ): GallerySlot[] {
   const list = filter === 'all' ? slots : slots.filter(slot => readSlot(chat, slot)?.state === filter);
-  return reverse ? [...list].reverse() : list;
+  if (order === 'desc') return [...list].reverse();
+  if (order === 'recent') {
+    // 最近出图的在前;一样新(或都没图)的按楼层倒序
+    const at = new Map(list.map(slot => [slot, slotLatestAt(chat, slot)]));
+    return [...list].sort((a, b) => at.get(b)! - at.get(a)! || b.floor - a.floor || b.seq - a.seq);
+  }
+  return list;
 }
 
 /** 查过的文件(不论在不在)不重复查。 */

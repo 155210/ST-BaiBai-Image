@@ -69,10 +69,24 @@ describe('readSlot', () => {
 describe('filterSlots', () => {
   const slots = listSlots(chat, [1, 2, 3]);
   it('filters by state and reverses', () => {
-    expect(filterSlots(chat, slots, 'has', false)).toEqual([{ floor: 1, seq: 0 }]);
-    expect(filterSlots(chat, slots, 'stale', false)).toEqual([{ floor: 1, seq: 1 }]);
-    expect(filterSlots(chat, slots, 'none', false)).toEqual([{ floor: 3, seq: 0 }]);
-    expect(filterSlots(chat, slots, 'all', true)).toEqual([...slots].reverse());
+    expect(filterSlots(chat, slots, 'has', 'asc')).toEqual([{ floor: 1, seq: 0 }]);
+    expect(filterSlots(chat, slots, 'stale', 'asc')).toEqual([{ floor: 1, seq: 1 }]);
+    expect(filterSlots(chat, slots, 'none', 'asc')).toEqual([{ floor: 3, seq: 0 }]);
+    expect(filterSlots(chat, slots, 'all', 'desc')).toEqual([...slots].reverse());
+  });
+  it('puts the most recently generated slot first', () => {
+    const recent: STMessage[] = [
+      ...chat.slice(0, 3),
+      aiFloor(`c ${TAG_B}`, { [promptHash(TAG_B)]: [entry(0, '/user/images/c1.png', 5)] }),
+      aiFloor(`d ${TAG_B}`),
+    ];
+    // 楼 3 最新(5),楼 1 第 0 张其次(2),楼 1 第 1 张只有旧图(1),楼 4 没图排最后
+    expect(filterSlots(recent, listSlots(recent, [1, 2, 3, 4]), 'all', 'recent')).toEqual([
+      { floor: 3, seq: 0 },
+      { floor: 1, seq: 0 },
+      { floor: 1, seq: 1 },
+      { floor: 4, seq: 0 },
+    ]);
   });
 });
 
@@ -82,7 +96,7 @@ describe('checkSlotFiles', () => {
     expect(await checkSlotFiles(chat, slots)).toBe(1);
     expect(isImageMissing('/user/images/gone-old.png')).toBe(true);
     expect(isImageMissing('/user/images/a1.png')).toBe(false);
-    expect(filterSlots(chat, slots, 'none', false)).toEqual([
+    expect(filterSlots(chat, slots, 'none', 'asc')).toEqual([
       { floor: 1, seq: 1 },
       { floor: 3, seq: 0 },
     ]);
