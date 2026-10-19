@@ -111,7 +111,20 @@ interface RunOptions {
    * 且忽略本次 AI 的 changes(首次全量分析已为整楼建过档)。
    */
   slot?: { seq: number };
+  /**
+   * 批量调用:不弹逐楼 toast(结果走返回值,由调用方汇总),也不挂自动出图标记——
+   * 批量写的楼大多不在页面上,标记会一直挂到用户翻到那楼才突然出图。
+   */
+  quiet?: boolean;
 }
+
+/**
+ * 一次运行的结局,供批量等调用方计数与重试;自动/楼层按钮路径忽略它。
+ * skipped = 开跑前就被闸门拦下(不是剧情楼、已有 tag 等);aborted = 被取消(切聊天/手动停止)。
+ */
+export type TagRunOutcome =
+  | { kind: 'written' | 'none' | 'skipped' | 'aborted' }
+  | { kind: 'failed'; reason?: string };
 
 /** 放弃写入的用户可读原因。文本变化已不在其中——那是正常情况,会 rebase 后照常写入。 */
 const ABANDON_REASON: Partial<Record<ApplyMessageResult, string>> = {
@@ -175,8 +188,9 @@ function planChangeOps(plan: ImagePlan): PositionedCharOp[] {
   return ops.sort((left, right) => left.sourceLine - right.sourceLine);
 }
 
-async function runForFloor(floor: number, opts: RunOptions = {}): Promise<void> {
+async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRunOutcome> {
   const context = getContext();
+  const notify = opts.manual && !opts.quiet;
   diagnostic('runForFloor:enter', {
     floor,
     manual: Boolean(opts.manual),
@@ -187,22 +201,22 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<void> 
     autoTagEnabled: settings.autoTag.enabled,
   });
   if (!context) {
-    abort(floor, 'missing-context', opts.manual, 'SillyTavern 还没就绪，请稍后重试');
-    return;
+    abort(floor, 'missing-context', notify, 'SillyTavern 还没就绪，请稍后重试');
+    return { kind: 'skipped' };
   }
   if (!settings.enabled) {
-    abort(floor, 'extension-disabled', opts.manual, '柏宝绘已停用，请先在插件设置里开启');
-    return;
+    abort(floor, 'extension-disabled', notify, '柏宝绘已停用，请先在插件设置里开启');
+    return { kind: 'skipped' };
   }
   if (!opts.manual && !settings.autoTag.enabled) {
     diagnostic('runForFloor:skip', { floor, reason: 'auto-tag-disabled' });
-    return;
+    return { kind: 'skipped' };
   }
   // 排除角色闸门(与柏宝书同名单):该角色名所在聊天的自动 tag 全流程停用,
   // 手动按钮也在 actionButton 层撤掉,这里做兜底(手动触发时给反馈)。
   if (isCurrentChatExcluded()) {
-    abort(floor, 'chat-excluded', opts.manual, '该角色已被排除，不生成生图 tag');
-    return;
+    abort(floor, 'chat-excluded', notify, '该角色已被排除，不生成生图 tag');
+    return { kind: 'skipped' };
   }
   const message = context.chat[floor];
   const messageDiagnostic = message
@@ -215,10 +229,10 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<void> 
     : null;
   // 与楼层按钮同一个谓词(st/context.ts):被 /hide 隐藏的普通楼算剧情楼,照样能跑
   if (!isAiStoryMessage(message)) {
-    abort(floor, 'not-ai-story-message', opts.manual, '这一楼不是可插图的剧情楼层（用户楼 / ST 系统楼）', {
+    abort(floor, 'not-ai-story-message', notify, '这一楼不是可插图的剧情楼层（用户楼 / ST 系统楼）', {
       message: messageDiagnostic,
     });
-    return;
+    return { kind: 'skipped' };
   }
   const rawSource = message.mes;
   const slot = opts.slot;
@@ -232,7 +246,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<void> 
       true,
       `第 ${slot.seq + 1} 张图片的提示词已不存在（可能已换 swipe 或被编辑），本次没有重写`,
     );
-    return;
+    return { kind: 'skipped' };
   }
   // 探测口径与按钮层同源(imageTagRegex.hasImageTagTrace):两侧漂移过一次——
   // 按钮只认开标签、这里认开也认闭,只剩 `</bbi_image>` 的楼就卡成「点了没反应」。
@@ -241,35 +255,35 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<void> 
     abort(
       floor,
       'already-has-image-tag',
-      opts.manual,
+      notify,
       '本楼已有生图 tag，没有确认重新生成，本次未改动',
     );
     if (!opts.manual) console.debug(`[柏宝绘] 第 ${floor} 楼已经含有 bbi_image tag，跳过自动分析`);
-    return;
+    return { kind: 'skipped' };
   }
   // replace / slot:分析都基于剔除旧 tag 后的正文。写回时 replace 让旧 tag 随之消失,
   // slot 按 seq 原位替换——别的 tag 在写回基底里原样保留。
   const source = opts.replace || slot ? stripImageTags(rawSource) : rawSource;
   if (!source.trim()) {
-    abort(floor, 'empty-source', opts.manual, '本楼正文是空的（或只剩生图 tag），没有可分析的内容');
-    return;
+    abort(floor, 'empty-source', notify, '本楼正文是空的（或只剩生图 tag），没有可分析的内容');
+    return { kind: 'skipped' };
   }
   const preparedTarget = prepareTargetText(source, settings.excludes.customStripTags);
   if (!preparedTarget.segments.length) {
     abort(
       floor,
       'no-target-segments',
-      opts.manual,
+      notify,
       '本楼正文清洗后没剩下叙事内容（可能被「剔除标签」名单或思维链/注释规则全删了），没有可分析的段落',
       { sourceLength: source.length },
     );
-    return;
+    return { kind: 'skipped' };
   }
 
   const chatId = context.getCurrentChatId?.() ?? '';
   if (!chatId) {
-    abort(floor, 'missing-chat-id', opts.manual, '当前没有打开的聊天，本次没有生成生图 tag');
-    return;
+    abort(floor, 'missing-chat-id', notify, '当前没有打开的聊天，本次没有生成生图 tag');
+    return { kind: 'skipped' };
   }
   const swipeId = activeSwipeId(message);
   const identity = `${chatId}\u0000${floor}\u0000${swipeId ?? 'none'}\u0000${textHash(source)}`;
@@ -277,7 +291,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<void> 
   // 但仍写入 processed,防止自动流程随后对同一正文重复请求。
   if (!opts.manual && processed.has(identity)) {
     diagnostic('runForFloor:skip', { floor, reason: 'already-processed', chatId, swipeId, identity });
-    return;
+    return { kind: 'skipped' };
   }
   processed.add(identity);
   diagnostic('runForFloor:start', {
@@ -332,7 +346,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<void> 
     for (let attempt = 0; attempt <= retries && !plan; attempt++) {
       if (controller.signal.aborted) {
         processed.delete(identity);
-        return;
+        return { kind: 'aborted' };
       }
       try {
         // parsed 用对象壳装着:validate 闭包写入,await 之后读取——请求成功 + 验收通过才非空。
@@ -378,13 +392,13 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<void> 
         }
         if (controller.signal.aborted) {
           processed.delete(identity);
-          return;
+          return { kind: 'aborted' };
         }
         plan = parsed.plan;
       } catch (error) {
         if (controller.signal.aborted) {
           processed.delete(identity);
-          return;
+          return { kind: 'aborted' };
         }
         lastError = error instanceof Error ? error.message : String(error);
         console.warn(`[柏宝绘] 第 ${floor} 楼第 ${attempt + 1}/${retries + 1} 次生成 tag 失败`, error);
@@ -393,11 +407,9 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<void> 
     if (!plan) {
       // 重试耗尽:允许同一正文在后续重新渲染后再试
       processed.delete(identity);
-      toastr.error(
-        `${lastError}${retries > 0 ? `(已自动重试 ${retries} 次)` : ''}`,
-        '柏宝绘自动 tag 失败',
-      );
-      return;
+      const reason = `${lastError}${retries > 0 ? `(已自动重试 ${retries} 次)` : ''}`;
+      if (!opts.quiet) toastr.error(reason, '柏宝绘自动 tag 失败');
+      return { kind: 'failed', reason };
     }
 
     // 单槽重写不落 changes:首次全量分析已为整楼建过档,这里再应用一次只会产生
@@ -474,19 +486,19 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<void> 
       // 这是漏建档唯一的确定性信号,藏进控制台等于没有,必须让用户看见。
       const names = [...unknownNames].join('、');
       console.warn('[柏宝绘] AI 引用了库里没有的角色占位符,已剥除:', names);
-      toastr.warning(`角色「${names}」没有建档，本次画面中缺少其外貌`, '柏宝绘');
+      if (!opts.quiet) toastr.warning(`角色「${names}」没有建档，本次画面中缺少其外貌`, '柏宝绘');
     }
 
     // 单槽重写没给出新提示词:保留原提示词与原图,不替换(空 images 不是错误)。
     if (slot && !plan.images.length) {
       toastr.info('模型没有给出新的提示词，本张保持原样', '柏宝绘');
-      return;
+      return { kind: 'none' };
     }
     // 没有图片、没有角色变化、也没有旧楼层变化要清理时,保持原来的无写入早退。
     if (!plan.images.length && !floorOps.length && !previousDelta) {
-      if (opts.manual) toastr.info('模型认为本楼没有值得插图的画面', '柏宝绘');
+      if (opts.manual && !opts.quiet) toastr.info('模型认为本楼没有值得插图的画面', '柏宝绘');
       else console.debug(`[柏宝绘] 第 ${floor} 楼无需插图`);
-      return;
+      return { kind: 'none' };
     }
 
     // 触发 MESSAGE_EDITED / MESSAGE_UPDATED,卡片水合挂载时消费标记并自动开始生成
@@ -494,7 +506,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<void> 
     // 单槽重写是用户在卡片上的显式意图(同提示词编辑弹窗的「应用并重新生成」),
     // 不受 autoTag.autoGenerate 开关约束,一律 force 出图。
     const markSwipeId = message.swipe_id ?? 0;
-    const marked = plan.images.length > 0 && (settings.autoTag.autoGenerate || !!slot);
+    const marked = plan.images.length > 0 && !opts.quiet && (settings.autoTag.autoGenerate || !!slot);
     if (marked) {
       if (slot) {
         markForAutoGenerate(chatId, floor, markSwipeId, slot.seq, 'force');
@@ -546,18 +558,18 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<void> 
     if (result === 'saved') {
       if (slot) {
         toastr.success(`已重写第 ${slot.seq + 1} 张的提示词，正在按新提示词出图`, '柏宝绘');
-        return;
+        return { kind: 'written' };
       }
       recomputeCharTags();
       if (rebaseNote) console.info(`[柏宝绘] 第 ${floor} 楼 tag 位置重定位:${rebaseNote}`);
       if (plan.images.length) {
-        toastr.success(`已在第 ${floor} 楼插入 ${plan.images.length} 个生图 tag`, '柏宝绘');
-      } else if (opts.manual) {
+        if (!opts.quiet) toastr.success(`已在第 ${floor} 楼插入 ${plan.images.length} 个生图 tag`, '柏宝绘');
+      } else if (opts.manual && !opts.quiet) {
         toastr.info('模型认为本楼没有值得插图的画面', '柏宝绘');
       } else {
         console.debug(`[柏宝绘] 第 ${floor} 楼无需插图`);
       }
-      return;
+      return { kind: plan.images.length ? 'written' : 'none' };
     }
     // 撤销标记只撤自己那一枚:clearAutoGenerateForFloor 会连累同楼其它槽位的待消费标记。
     if (marked) {
@@ -569,8 +581,11 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<void> 
     if (slot && result === 'build-failed') {
       toastr.warning('这张图的提示词在生成期间已被改动，本次没有覆盖它', '柏宝绘');
     } else {
-      toastr.warning(ABANDON_REASON[result] ?? '本次没有写入生图 tag', '柏宝绘');
+      const reason = ABANDON_REASON[result] ?? '本次没有写入生图 tag';
+      if (!opts.quiet) toastr.warning(reason, '柏宝绘');
+      return { kind: 'failed', reason };
     }
+    return { kind: 'failed' };
   } catch (error) {
     // 请求失败或被切换聊天取消时允许同一正文在后续重新渲染后重试。
     processed.delete(identity);
@@ -578,10 +593,11 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<void> 
     // 单槽只撤自己那一枚:clearAutoGenerateForFloor 会连累同楼其它槽位的待消费标记。
     if (slot) consumeAutoGenerate(chatId, floor, swipeId ?? 0, slot.seq);
     else clearAutoGenerateForFloor(chatId, floor);
-    if (controller.signal.aborted) return;
+    if (controller.signal.aborted) return { kind: 'aborted' };
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[柏宝绘] 第 ${floor} 楼自动生成 tag 失败`, error);
-    toastr.error(message, '柏宝绘自动 tag 失败');
+    if (!opts.quiet) toastr.error(message, '柏宝绘自动 tag 失败');
+    return { kind: 'failed', reason: message };
   } finally {
     if (running.get(runKey) === controller) running.delete(runKey);
   }
@@ -612,8 +628,11 @@ function scheduleForGeneratedFloor(floor: number, chatId: string): void {
  * 楼层按钮的手动入口。replace=true 用于「已有 tag 重新生成」:
  * 剔除旧 tag → 分析 → 写回新 tag(旧 tag 随写回消失,旧图留在卡片历史)。
  */
-export async function requestFloorTags(floor: number, opts: { replace?: boolean } = {}): Promise<void> {
-  await runForFloor(floor, { manual: true, replace: opts.replace });
+export async function requestFloorTags(
+  floor: number,
+  opts: { replace?: boolean; quiet?: boolean } = {},
+): Promise<TagRunOutcome> {
+  return runForFloor(floor, { manual: true, replace: opts.replace, quiet: opts.quiet });
 }
 
 /**

@@ -1,5 +1,6 @@
 import type { Component } from 'vue';
 import Backend from './backend/index.vue';
+import Batch from './batch/index.vue';
 import Characters from './characters/index.vue';
 import Gallery from './gallery/index.vue';
 import History from './history/index.vue';
@@ -21,6 +22,7 @@ export const PAGES: PageDef[] = [
   { id: 'backend', label: '渠道', component: Backend },
   { id: 'characters', label: '角色管理', component: Characters },
   { id: 'gallery', label: '图库', component: Gallery },
+  { id: 'batch', label: '批量', component: Batch },
   { id: 'history', label: '请求历史', component: History },
   { id: 'settings', label: '设置', component: Settings },
 ];
