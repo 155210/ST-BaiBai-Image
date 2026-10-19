@@ -1,3 +1,4 @@
+import { BBI_IMAGE_EXTRA_KEY } from '@/floor/storage';
 import { BBI_CHAR_EXTRA_KEY } from '@/state/charTags';
 import { getContext, type STContext, type STMessage } from '@/st/context';
 
@@ -10,9 +11,13 @@ import { getContext, type STContext, type STMessage } from '@/st/context';
  * 前面漏的也就补上了——收尾时存一次、读回来比一遍即可,不用每楼都下载整个聊天。
  */
 
-/** 参与比对的内容:正文(tag 写在这里)和本楼的角色档案增量。 */
+/** 参与比对的内容:正文(tag 写在这里)、本楼的角色档案增量、出图记录(图片指针)。 */
 function signature(message: STMessage | undefined): string {
-  return JSON.stringify([message?.mes ?? null, message?.extra?.[BBI_CHAR_EXTRA_KEY] ?? null]);
+  return JSON.stringify([
+    message?.mes ?? null,
+    message?.extra?.[BBI_CHAR_EXTRA_KEY] ?? null,
+    message?.extra?.[BBI_IMAGE_EXTRA_KEY] ?? null,
+  ]);
 }
 
 export function unsavedFloors(memory: STMessage[], saved: STMessage[], floors: number[]): number[] {

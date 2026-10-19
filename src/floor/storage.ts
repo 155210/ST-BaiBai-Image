@@ -425,7 +425,8 @@ export async function saveImageResult(
   if (!chatId) throw new Error('当前聊天不可用');
 
   const hash = promptHash(tag);
-  const characterName = ctx.chat[messageId]?.name?.trim() || ctx.name2?.trim() || '未命名角色';
+  const target = ctx.chat[messageId];
+  const characterName = target?.name?.trim() || ctx.name2?.trim() || '未命名角色';
   const { path, genId, createdAt } = await uploadImageWithSidecar(
     characterName,
     swipeId,
@@ -447,6 +448,16 @@ export async function saveImageResult(
     slotSeq: seq,
     ...(meta ? { meta } : {}),
   };
+
+  // 上传要好几秒:期间切了聊天或删了楼,messageId 已指向别的消息,写进去就串楼了。
+  // 文件留在图库里(侧写记着提示词),不写指针。认人口径同 st/messageEdit.ts 的 isSameMessage。
+  const now = ctx.chat[messageId];
+  const sameMessage =
+    !!now && (now === target || (!!target?.send_date && now.send_date === target.send_date && now.name === target.name));
+  if (ctx.getCurrentChatId() !== chatId || !sameMessage) {
+    console.warn('[柏宝绘] 出图期间聊天或楼层已变化，图片只存进图库、没有写入楼层', path);
+    throw new Error('出图期间切换了聊天或楼层有变动，图片已存进图库，但没有写入这一楼');
+  }
 
   const saved = await mutateStore(ctx, messageId, store => appendEntry(store, swipeId, hash, entry));
   if (!saved) {
