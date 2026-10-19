@@ -58,8 +58,12 @@
 在 SillyTavern 的「扩展 → 安装扩展」里填入本仓库地址即可：
 
 ```
-https://github.com/baibai-git/ST-BaiBai-Image
+https://github.com/155210/ST-BaiBai-Image
 ```
+
+> 本仓库是 [baibai-git/ST-BaiBai-Image](https://github.com/baibai-git/ST-BaiBai-Image) 的维护分支。设置页的「检查更新」看的是本仓库；从原仓库装的用户点更新只会拉到原仓库的版本。
+
+版本号沿用原作者的前三位，第四位是本分支的修订号（例如 `0.3.2.1` 基于原作者 `0.3.2`）。
 
 安装后进入「设置」页：先到「渠道」页配置出图渠道（本地 ComfyUI 或 NovelAI 账号），再确认「自动生成 tag」开关已打开，就可以开始自动配图了。设置会随 SillyTavern 保存在服务器，跨设备自动同步。
 

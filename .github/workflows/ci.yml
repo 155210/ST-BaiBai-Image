@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: 类型检查
+        run: pnpm exec vue-tsc --noEmit -p tsconfig.check.json
+      - name: 测试
+        run: pnpm test
+      - name: 构建产物与源码一致
+        run: |
+          pnpm build
+          git diff --stat --exit-code -- dist manifest.json || {
+            echo "::error::dist/ 或 manifest.json 与源码构建结果不一致，请本地 pnpm build 后一起提交"
+            exit 1
+          }
