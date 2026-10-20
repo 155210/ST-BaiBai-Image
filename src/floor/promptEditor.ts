@@ -6,6 +6,7 @@ import { markForAutoGenerate, consumeAutoGenerate } from '@/floor/autoGenerate';
 import { hydrateMessage } from '@/floor/hydrate';
 import { awaitTagPlan, isTagPlanning, runTagPlan } from '@/floor/tagPlanState';
 import { slotKey } from '@/floor/genState';
+import { setPassageFloor } from '@/rewriteHint/passage';
 import { confirmDialog } from '@/components/confirm';
 import { getContext } from '@/st/context';
 import {
@@ -183,6 +184,7 @@ export function openPromptEditor(options: PromptEditorOptions): void {
   const root = document.getElementById(HOST_ID)?.shadowRoot;
   if (!root) return;
   closeCurrent?.();
+  setPassageFloor(options.at.messageId); // fork:「挑正文里的一段」要知道是哪一楼
 
   const container = document.createElement('div');
   root.appendChild(container);
