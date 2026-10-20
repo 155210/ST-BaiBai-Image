@@ -63,3 +63,15 @@ export function applyPassageHint(current: string, line: string): string {
     .trim();
   return [line, rest].filter(Boolean).join('\n');
 }
+
+/**
+ * 还没有 tag 的楼「挑一段生图」:发给 AI 的任务备注(接在 runner 的 taskNote 位置)。
+ * 与单槽重写不同,这里没有旧画面可锚,只说清楚画哪几段、恰好 1 张、位置落在这几段里。
+ */
+export function passageTaskNote(hint: string): string {
+  return [
+    '【用户指定了这次要画的正文段落（优先级最高）】',
+    hint.trim(),
+    '只为这部分正文画 1 张图：images 数组必须恰好返回 1 项，position 选在用户指定的段落里，不要画其它段落的场景。',
+  ].join('\n');
+}
