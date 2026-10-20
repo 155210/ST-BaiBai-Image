@@ -7,7 +7,7 @@ const chat = [
 ];
 vi.mock('@/st/context', () => ({ getContext: () => ({ chat }) }));
 
-import { applyPassageHint, floorPassages, PASSAGE_HINT_PREFIX, passageHint } from './passage';
+import { applyPassageHint, floorPassages, PASSAGE_HINT_PREFIX, passageHint, passageTaskNote } from './passage';
 
 describe('floorPassages', () => {
   it('按 AI 看到的样子切段:去掉思维链和生图 tag,编号 P1 起', () => {
@@ -53,5 +53,13 @@ describe('applyPassageHint', () => {
 
   it('传空行 = 去掉那句', () => {
     expect(applyPassageHint(`${PASSAGE_HINT_PREFIX} A\n换成全身构图`, '')).toBe('换成全身构图');
+  });
+});
+
+describe('passageTaskNote', () => {
+  it('带上用户的段落要求,并要求恰好 1 张', () => {
+    const note = passageTaskNote(`${PASSAGE_HINT_PREFIX} ⟦P2⟧`);
+    expect(note).toContain('⟦P2⟧');
+    expect(note).toContain('恰好返回 1 项');
   });
 });

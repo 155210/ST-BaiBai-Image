@@ -11,6 +11,7 @@ import { autoTagProfile, buildAutoTagMessages } from '@/autoTag/prompt';
 import { rebaseImagePositions, type RebaseReport } from '@/autoTag/rebase';
 import { buildSlotTaskNote } from '@/autoTag/slotPlan';
 import { withRewriteHint } from '@/rewriteHint/hint';
+import { passageTaskNote } from '@/rewriteHint/passage';
 import {
   BBI_CHAR_EXTRA_KEY,
   CHAR_TAG_FIELDS,
@@ -118,6 +119,8 @@ interface RunOptions {
    * 批量写的楼大多不在页面上,标记会一直挂到用户翻到那楼才突然出图。
    */
   quiet?: boolean;
+  /** fork:还没 tag 的楼「挑一段生图」——只为用户点选的段落画 1 张,见 rewriteHint/passage.ts。 */
+  focus?: string;
 }
 
 /**
@@ -322,7 +325,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
     // 单槽重写:协议强制「恰好 1 张」,并把该槽位当前提示词与其余槽位摘要带给模型
     // (锚住同一个画面、别抢别人的画面)。min/max 要同时覆盖 build 的规则文案与下面的
     // parse 校验,只改一处会自相矛盾。
-    const promptOptions = slot
+    const promptOptions = slot || opts.focus // fork:挑一段生图同样恰好 1 张
       ? { ...settings.autoTag, minImages: 1, maxImages: 1 }
       : settings.autoTag;
     // 协议形态开跑时快照一次:写协议、验收与收尾同一份,用户中途拨开关也不会前后不一
@@ -334,7 +337,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
       memory,
       preparedTarget,
       anchors.text,
-      slot ? withRewriteHint(buildSlotTaskNote(rawSource, slot.seq), slot.hint) : '',
+      slot ? withRewriteHint(buildSlotTaskNote(rawSource, slot.seq), slot.hint) : opts.focus ? passageTaskNote(opts.focus) : '',
       profile,
     );
     const channel = getTagGenChannel();
@@ -528,13 +531,13 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
     // 单槽重写是用户在卡片上的显式意图(同提示词编辑弹窗的「应用并重新生成」),
     // 不受 autoTag.autoGenerate 开关约束,一律 force 出图。
     const markSwipeId = message.swipe_id ?? 0;
-    const marked = plan.images.length > 0 && !opts.quiet && (settings.autoTag.autoGenerate || !!slot);
+    const marked = plan.images.length > 0 && !opts.quiet && (settings.autoTag.autoGenerate || !!slot || !!opts.focus);
     if (marked) {
       if (slot) {
         markForAutoGenerate(chatId, floor, markSwipeId, slot.seq, 'force');
       } else {
         for (let seq = 0; seq < plan.images.length; seq++) {
-          markForAutoGenerate(chatId, floor, markSwipeId, seq);
+          markForAutoGenerate(chatId, floor, markSwipeId, seq, opts.focus ? 'force' : undefined); // fork:挑一段生图是显式意图
         }
       }
     }
@@ -669,6 +672,11 @@ export async function requestFloorTags(
  * 分析基底剔除全部旧 tag(AI 不该把 tag 当正文),强制输出 1 张;本楼其它 tag 与图片
  * 一字不动,旧图留在该槽位历史里。本次 AI 输出的 changes 一律忽略(首次全量分析时已建档)。
  */
+/** fork:还没 tag 的楼「挑一段生图」,hint 是 passageHint 拼好的「只画这几段」要求。 */
+export async function requestFocusedTags(floor: number, hint: string): Promise<TagRunOutcome> {
+  return runForFloor(floor, { manual: true, focus: hint });
+}
+
 export async function requestSlotTag(floor: number, seq: number, hint = ''): Promise<void> {
   await runForFloor(floor, { manual: true, slot: { seq, hint } });
 }

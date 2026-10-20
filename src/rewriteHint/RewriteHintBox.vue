@@ -4,6 +4,7 @@ import { computed, ref } from 'vue';
 import BbiTextarea from '@/components/BbiTextarea.vue';
 
 import { MAX_REWRITE_HINT } from './hint';
+import PassageList from './PassageList.vue';
 import { applyPassageHint, floorPassages, passageFloor, passageHint, PASSAGE_HINT_PREFIX, type Passage } from './passage';
 
 /**
@@ -21,7 +22,7 @@ const emit = defineEmits<{ (e: 'update:modelValue', value: string): void }>();
 
 const picking = ref(false);
 const passages = ref<Passage[]>([]);
-const picked = ref<Set<string>>(new Set());
+const picked = ref<string[]>([]);
 
 const hasPassageLine = computed(() =>
   props.modelValue.split('\n').some(line => line.startsWith(PASSAGE_HINT_PREFIX)),
@@ -29,19 +30,12 @@ const hasPassageLine = computed(() =>
 
 function openPicker(): void {
   passages.value = floorPassages(passageFloor.value);
-  picked.value = new Set();
+  picked.value = [];
   picking.value = true;
 }
 
-function toggle(id: string): void {
-  const next = new Set(picked.value);
-  if (next.has(id)) next.delete(id);
-  else next.add(id);
-  picked.value = next;
-}
-
 function confirmPick(): void {
-  const chosen = passages.value.filter(p => picked.value.has(p.id));
+  const chosen = passages.value.filter(p => picked.value.includes(p.id));
   emit('update:modelValue', applyPassageHint(props.modelValue, passageHint(chosen)));
   picking.value = false;
 }
@@ -69,30 +63,16 @@ function clearPick(): void {
 
     <div v-if="picking" class="bbi-passage-picker">
       <p class="bbi-passage-picker__tip">点选要画的段落（可多选），再点「就画这些」。</p>
-      <p v-if="!passages.length" class="bbi-passage-picker__empty">本楼正文没有可挑的段落。</p>
-      <ul v-else class="bbi-passage-list">
-        <li v-for="p in passages" :key="p.id">
-          <button
-            type="button"
-            class="bbi-passage"
-            :class="{ 'is-picked': picked.has(p.id) }"
-            :aria-pressed="picked.has(p.id)"
-            @click="toggle(p.id)"
-          >
-            <span class="bbi-passage__mark">{{ picked.has(p.id) ? '✓' : p.id.slice(1) }}</span>
-            <span class="bbi-passage__text">{{ p.text }}</span>
-          </button>
-        </li>
-      </ul>
+      <PassageList v-model="picked" :passages="passages" />
       <div class="bbi-passage-picker__actions">
         <button class="bbi-btn bbi-btn-sm" type="button" @click="picking = false">取消</button>
         <button
           class="bbi-btn bbi-btn-sm bbi-btn-primary"
           type="button"
-          :disabled="!picked.size"
+          :disabled="!picked.length"
           @click="confirmPick"
         >
-          就画这些{{ picked.size ? `（${picked.size} 段）` : '' }}
+          就画这些{{ picked.length ? `（${picked.length} 段）` : '' }}
         </button>
       </div>
     </div>
@@ -163,73 +143,10 @@ function clearPick(): void {
   border-radius: 8px;
 }
 
-.bbi-passage-picker__tip,
-.bbi-passage-picker__empty {
+.bbi-passage-picker__tip {
   margin: 0;
   font-size: 12px;
   opacity: 0.75;
-}
-
-.bbi-passage-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: 45vh;
-  margin: 0;
-  padding: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  list-style: none;
-}
-
-.bbi-passage {
-  display: flex;
-  gap: 8px;
-  width: 100%;
-  min-height: 44px;
-  padding: 8px;
-  border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
-  border-radius: 6px;
-  background: none;
-  color: inherit;
-  font: inherit;
-  font-size: 13px;
-  line-height: 1.6;
-  text-align: left;
-  cursor: pointer;
-}
-
-.bbi-passage.is-picked {
-  border-color: var(--bbi-accent, #7c9cff);
-  background: color-mix(in srgb, var(--bbi-accent, #7c9cff) 15%, transparent);
-}
-
-.bbi-passage__mark {
-  flex: 0 0 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: color-mix(in srgb, currentColor 12%, transparent);
-  font-size: 12px;
-  line-height: 22px;
-  text-align: center;
-}
-
-.bbi-passage.is-picked .bbi-passage__mark {
-  background: var(--bbi-accent, #7c9cff);
-  color: #fff;
-}
-
-.bbi-passage__text {
-  flex: 1;
-  min-width: 0;
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  /* 长段落只露前几行,够认出是哪段;手机上一屏能看到好几段 */
-  -webkit-line-clamp: 4;
-  line-clamp: 4;
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 
 .bbi-passage-picker__actions {
