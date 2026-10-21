@@ -108,7 +108,8 @@ function edit(): void {
     },
     historyCount: current.history.length,
     configured: backendStatus().configured,
-    regenerate: () => void regenerateSlot(floor, seq),
+    // 挑段落重写后图可能挪了位置,seq 跟到新序号(见 rewriteHint/move.ts)
+    regenerate: (moved?: number) => void regenerateSlot(floor, moved ?? seq),
   });
 }
 

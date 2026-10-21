@@ -7,6 +7,7 @@ import { hydrateMessage } from '@/floor/hydrate';
 import { awaitTagPlan, isTagPlanning, runTagPlan } from '@/floor/tagPlanState';
 import { slotKey } from '@/floor/genState';
 import { setPassageFloor } from '@/rewriteHint/passage';
+import { followMovedSlot } from '@/rewriteHint/move';
 import { confirmDialog } from '@/components/confirm';
 import { getContext } from '@/st/context';
 import {
@@ -59,7 +60,7 @@ export interface PromptEditorOptions {
    * 没有卡片来认领自动出图标记,标记留着反而会在日后翻到那楼时再出一次)。
    * 不给 = 照旧挂标记、由卡片出图。
    */
-  regenerate?: () => void;
+  regenerate?: (seq?: number) => void;
 }
 
 /** 同一时刻只允许一个编辑弹窗,重复调用先关旧的。 */
@@ -276,8 +277,9 @@ export function openPromptEditor(options: PromptEditorOptions): void {
       .finally(() => {
         // fork:图片浏览开的弹窗(给了 regenerate),楼层多半不在页面上,没有卡片来认领
         // 重写后的出图标记 —— 标记还在就自己出图,图片浏览才看得到生成中 / 排队中
+        followMovedSlot(options.at); // fork:挑段落重写后图挪了位置,弹窗跟到新序号
         if (options.regenerate && consumeAutoGenerate(options.at.chatId, options.at.messageId, options.at.swipeId, options.at.seq)) {
-          options.regenerate();
+          options.regenerate(options.at.seq);
         }
         refreshFromMessage();
         paint();
