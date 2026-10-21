@@ -188,7 +188,11 @@ export function openGalleryLightbox(options: GalleryLightboxOptions): void {
       historyCount: view.history.length,
       configured: backendStatus().configured,
       // 大图一直开着:出图进度显示在左上,出完自动换新图(见下面的 poll)
-      regenerate: () => void regenerateSlot(view.floor, view.seq),
+      regenerate: (moved?: number) => {
+        // 挑段落重写后图挪了位置:这张卡片跟到新序号,poll 发现原位置的 tag 变了就按新序号重开大图
+        if (moved !== undefined && moved !== view.seq) list[index] = { ...slot, seq: moved };
+        void regenerateSlot(view.floor, moved ?? view.seq);
+      },
     });
   };
   // 同一张卡片的历史 roll:小箭头在左上角,和切卡片的两侧大箭头分开

@@ -12,6 +12,7 @@ import { rebaseImagePositions, type RebaseReport } from '@/autoTag/rebase';
 import { buildSlotTaskNote } from '@/autoTag/slotPlan';
 import { withRewriteHint } from '@/rewriteHint/hint';
 import { passageTaskNote } from '@/rewriteHint/passage';
+import { pinFocusPosition, placeSlotTag, slotExtraUpdate } from '@/rewriteHint/move';
 import {
   BBI_CHAR_EXTRA_KEY,
   CHAR_TAG_FIELDS,
@@ -38,7 +39,6 @@ import { getContext, isAiStoryMessage, type STMessage } from '@/st/context';
 import {
   hasImageTagTrace,
   parseImageTags,
-  replaceImageTagAt,
   serializeImageTag,
   stripImageTags,
 } from '@/st/imageTagRegex';
@@ -437,6 +437,8 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
       return { kind: 'failed', reason };
     }
 
+    if (opts.focus) pinFocusPosition(plan.images, preparedTarget.segments, opts.focus); // fork:图钉到所选段落后
+
     // 单槽重写不落 changes:首次全量分析已为整楼建过档,这里再应用一次只会产生
     // 重复的建档/变更记录;库文本已含本楼增量(见上面 entriesBefore),AI 照抄即可。
     const planOps = slot ? [] : planChangeOps(plan);
@@ -552,7 +554,8 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
         // 开跑时快照的原文对不上 = 期间被用户/别的流程改过,放弃覆盖(同提示词编辑弹窗)。
         if (slot) {
           if (parseImageTags(currentText)[slot.seq] !== slotRawTag) return null;
-          return replaceImageTagAt(currentText, slot.seq, serializeImageTag(plan.images[0]));
+          // fork:挑了段落就挪到那段后面(见 rewriteHint/move.ts),否则与上游一样原位替换
+          return placeSlotTag(currentText, { chatId, floor, swipeId: markSwipeId, seq: slot.seq }, serializeImageTag(plan.images[0]), slot.hint);
         }
         // replace 路径同样以当前正文为基底剔除旧 tag,不能用旧快照
         const base = opts.replace ? stripImageTags(currentText) : currentText;
@@ -574,7 +577,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
       message,
       // 单槽不写法:本楼角色增量与其它槽位图片都不归它管,不传 extraUpdate 即保持原样。
       slot
-        ? undefined
+        ? slotExtraUpdate(floor) // fork:挪位置时图片记录的序号一起重排
         : {
             key: BBI_CHAR_EXTRA_KEY,
             value: makeCharTagFloorDelta(floorOps, swipeId ?? 0),

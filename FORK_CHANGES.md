@@ -69,6 +69,12 @@
 | src/autoTag/runner.ts | opts.focus ? 'force' : undefined | 同上：出图标记用 force | 挑一段生图 |
 | src/autoTag/runner.ts | export async function requestFocusedTags | 同上：入口 | 挑一段生图 |
 | src/index.ts | bindPassageGenButtons(); | 楼层上的「挑一段生图」按钮 | 挑一段生图 |
+| src/autoTag/runner.ts | import { pinFocusPosition, placeSlotTag, slotExtraUpdate } from '@/rewriteHint/move'; | 引入「挑段落后图挪到那段后面」 | 挑段落挪位置 |
+| src/autoTag/runner.ts | if (opts.focus) pinFocusPosition(plan.images, preparedTarget.segments, opts.focus); | 挑一段生图：图钉到所选段落后 | 挑段落挪位置 |
+| src/autoTag/runner.ts | return placeSlotTag(currentText, { chatId, floor, swipeId: markSwipeId, seq: slot.seq }, serializeImageTag(plan.images[0]), slot.hint); | 单槽重写挑了段落就把 tag 挪到那段后面 | 挑段落挪位置 |
+| src/autoTag/runner.ts | ? slotExtraUpdate(floor) | 挪位置时图片记录的序号同一次写回重排 | 挑段落挪位置 |
+| src/floor/promptEditor.ts | followMovedSlot(options.at); | 提示词弹窗跟到挪过的新序号 | 挑段落挪位置 |
+| src/floor/promptEditor.ts | options.regenerate(options.at.seq); | 图片浏览按新序号出图 | 挑段落挪位置 |
 
 ## 其他本分支改动（不在原作者文件里，或合并时一定会冲突、手动处理）
 
