@@ -82,6 +82,9 @@
 | src/backends/nai.ts | await assertNaiFreeAllowed(nai, params); | 会扣 Anlas 的图在发请求前拦下 | 官方额度与 Anlas |
 | src/pages/backend/panels/NaiPanel.vue | import NaiQuotaSection from '@/naiQuota/NaiQuotaSection.vue'; | NAI 页引入额度区块 | 官方额度与 Anlas |
 | src/pages/backend/panels/NaiPanel.vue | <NaiQuotaSection /> | NAI 页显示订阅、Anlas、每张费用和开关 | 官方额度与 Anlas |
+| src/st/messageEdit.ts | import { deferWhileGenerating } from '@/streamSafe/deferWhileGenerating'; | 引入「出字时推迟通知」 | 流式卡住 |
+| src/st/messageEdit.ts | // fork:流式输出期间推迟通知 | 写完 tag 时酒馆正在出字：事件等输出完再发，免得别的插件重绘聊天把流式卡住 | 流式卡住 |
+| src/st/messageEdit.ts | // fork:流式输出期间不整段重载 | 同上：本楼刷新失败时也不在出字途中整段重载聊天 | 流式卡住 |
 
 ## 其他本分支改动（不在原作者文件里，或合并时一定会冲突、手动处理）
 
@@ -100,6 +103,7 @@
 - `src/rewriteHint/`：AI 重写提示词时可以写额外要求；「挑正文里的一段」点选本楼段落只画那几段；还没 tag 的楼在「⋯」里有「挑一段生图」按钮
 - `src/autoTag/heavyPreset.ts`、`src/pages/settings/HeavyPresetPanel.vue`：解析失败时改用酒馆预设（重型自定义提示词）
 - `src/stream/`：副 API 流式实时输出、无响应超时
+- `src/streamSafe/`：酒馆正在流式出字时，写完 tag 的楼层更新通知先排队，输出完再补发
 - `src/fork.guard.test.ts`、本文件
 
 ## 合并原作者更新的步骤
