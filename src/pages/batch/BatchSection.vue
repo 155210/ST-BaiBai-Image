@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import NaiCostHint from '@/naiQuota/NaiCostHint.vue';
 import { computed, ref, watch } from 'vue';
 
 import Collapsible from '@/components/Collapsible.vue';
@@ -174,6 +175,8 @@ async function start(): Promise<void> {
       <template v-else-if="kind === 'tag'">要写 {{ plan.todo.length }} 楼（{{ TEXT.skip }}）</template>
       <template v-else>{{ plan.todo.length }} 楼共 {{ plan.images }} 张没出（{{ TEXT.skip }}）</template>
     </p>
+
+    <NaiCostHint v-if="kind === 'image' || thenImages" />
 
     <label class="bbi-num-row">
       <span class="bbi-field-label">每楼间隔（秒）</span>

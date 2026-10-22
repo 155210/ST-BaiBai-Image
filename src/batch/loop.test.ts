@@ -160,4 +160,23 @@ describe('runBatchLoop', () => {
     expect(job.note).toContain('已切换聊天');
     expect(job.cursor).toBe(1);
   });
+
+  it('「只用免费额度」拦下出图:不记这楼、直接暂停,继续时从这楼重来', async () => {
+    const job = createJob('image', 'chat', [1, 2, 3]);
+    const run = outcomes({ 2: { kind: 'failed', reason: '第 1 张：【只用免费额度】这张会扣约 29 Anlas' } });
+    await runBatchLoop(job, deps({ runFloor: run }), new AbortController().signal, OPTIONS);
+    expect(job).toMatchObject({ status: 'paused', cursor: 1, written: 1, fails: [] });
+    expect(job.note).toContain('只用免费额度');
+  });
+
+  it('写 tag 接着出图被拦:这楼 tag 照常记上,然后暂停', async () => {
+    const job = createJob('tag', 'chat', [1, 2, 3]);
+    await runBatchLoop(
+      job,
+      deps({ runFloor: async floor => (floor === 2 ? { kind: 'written', pause: '【只用免费额度】会扣 Anlas' } : { kind: 'written' }) }),
+      new AbortController().signal,
+      OPTIONS,
+    );
+    expect(job).toMatchObject({ status: 'paused', cursor: 2, written: 2, touched: [1, 2] });
+  });
 });

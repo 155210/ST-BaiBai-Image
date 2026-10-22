@@ -287,6 +287,8 @@ export interface NaiSettings extends BackendConn {
    * ComfyUI 无此设置:它有服务端队列,一次性全发即可。
    */
   concurrency: number;
+  /** fork:只用官方免费额度,会扣 Anlas 的图不出(见 naiQuota/)。 */
+  freeOnly: boolean;
   /** Vibe 库索引；正文存在 ST user/files，设置中不存大 Base64。 */
   vibes: NaiVibe[];
   /**
@@ -1158,6 +1160,7 @@ function naiDefaults(): NaiSettings {
     varietyBoost: true,
     normalizeRefStrength: true,
     concurrency: 1,
+    freeOnly: false, // fork:只用免费额度
     vibes: [],
     // 用户库为空:库里只有用户自己建的配方,官方推荐的那条是内置只读条目
     // (BUILTIN_NAI_ARTISTS),不进 settings。
@@ -1678,6 +1681,7 @@ function normalizeNai(raw: unknown, def: NaiSettings): NaiSettings {
     normalizeRefStrength:
       typeof o.normalizeRefStrength === 'boolean' ? o.normalizeRefStrength : def.normalizeRefStrength,
     concurrency: Math.round(clampNumber(o.concurrency, def.concurrency, 1, 4)),
+    freeOnly: o.freeOnly === true, // fork:只用免费额度
     vibes: Array.isArray(o.vibes)
       ? o.vibes.map((v, i) => normalizeVibe(v, i)).filter((v): v is NaiVibe => v !== null)
       : def.vibes,
