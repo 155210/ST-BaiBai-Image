@@ -123,13 +123,6 @@ export function estimateBoth(quota: NaiQuota, nai: Pick<NaiSettings, 'portraitSi
  */
 const OFFICIAL_URL = 'https://image.novelai.net';
 
-/** 同 backends/nai.ts 的 naiEndpoint(不引它,理由同上)。 */
-function endpoint(url: string, path: string): string {
-  const base = url.trim().replace(/\/+$/, '');
-  if (base.endsWith(`/ai/${path}`) || base.endsWith(`/${path}`)) return base;
-  return `${base}/ai/${path}`;
-}
-
 export function isOfficialUrl(url: string): boolean {
   return String(url ?? '').trim().replace(/\/+$/, '') === OFFICIAL_URL;
 }
@@ -148,27 +141,32 @@ export const quotaState = reactive({
 /** 缓存多久内直接用(出图前的检查不必每张都查一次)。 */
 const FRESH_MS = 60_000;
 
-/** 官方账号接口在 api.novelai.net;出图域名下的同名路径作后备(上游「测试连接」用的就是它)。 */
-export const NAI_ACCOUNT_API = 'https://api.novelai.net/user/subscription';
+/**
+ * 订阅与 Anlas 的查询地址。NovelAI 已把它从 api.novelai.net 挪到出图域名下
+ * (旧地址现在回 400「update to the image URL」),路径没有 /ai/ 前缀(带了是 404)。
+ * 旧地址留作后备,万一哪天又挪回去。
+ */
+export const NAI_SUBSCRIPTION_URLS = [
+  'https://image.novelai.net/user/subscription',
+  'https://api.novelai.net/user/subscription',
+] as const;
 
-async function fetchSubscription(nai: Pick<NaiSettings, 'url' | 'key'>, signal?: AbortSignal): Promise<unknown> {
+async function fetchSubscription(nai: Pick<NaiSettings, 'key'>, signal?: AbortSignal): Promise<unknown> {
   const headers = { Authorization: `Bearer ${nai.key.trim()}` };
-  let lastError: unknown = null;
-  for (const url of [NAI_ACCOUNT_API, endpoint(nai.url, 'user/subscription')]) {
+  let firstError: unknown = null;
+  for (const url of NAI_SUBSCRIPTION_URLS) {
     try {
       const resp = await fetch(url, { headers, signal });
       if (resp.status === 401) throw new Error('API Key 无效(401)');
-      if (!resp.ok) {
-        lastError = new Error(`订阅接口返回 ${resp.status}`);
-        continue;
-      }
+      if (!resp.ok) throw new Error(`订阅接口返回 ${resp.status}`);
       return await resp.json();
     } catch (error) {
       if (signal?.aborted || (error instanceof Error && error.message.includes('401'))) throw error;
-      lastError = error;
+      // 报主地址的错:后备地址的错(多半是旧地址的 400)只会误导
+      firstError ??= error;
     }
   }
-  throw lastError instanceof Error ? lastError : new Error('订阅接口不可用');
+  throw firstError instanceof Error ? firstError : new Error('订阅接口不可用');
 }
 
 /** 查一次订阅与 Anlas。官方接入点之外返回 null。 */
