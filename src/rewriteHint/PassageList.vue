@@ -9,6 +9,8 @@ const props = defineProps<{
   passages: Passage[];
   /** 选中的段落 id */
   modelValue: string[];
+  /** 已归到别的组的段落:id → 角标(如「图1」);点它会改归当前组 */
+  labels?: Record<string, string>;
 }>();
 
 const emit = defineEmits<{ (e: 'update:modelValue', value: string[]): void }>();
@@ -29,11 +31,11 @@ function toggle(id: string): void {
       <button
         type="button"
         class="bbi-passage"
-        :class="{ 'is-picked': modelValue.includes(p.id) }"
+        :class="{ 'is-picked': modelValue.includes(p.id), 'is-other': !modelValue.includes(p.id) && !!labels?.[p.id] }"
         :aria-pressed="modelValue.includes(p.id)"
         @click="toggle(p.id)"
       >
-        <span class="bbi-passage__mark">{{ modelValue.includes(p.id) ? '✓' : p.id.slice(1) }}</span>
+        <span class="bbi-passage__mark">{{ modelValue.includes(p.id) ? '✓' : (labels?.[p.id] ?? p.id.slice(1)) }}</span>
         <span class="bbi-passage__text">{{ p.text }}</span>
       </button>
     </li>
@@ -94,6 +96,17 @@ function toggle(id: string): void {
 .bbi-passage.is-picked .bbi-passage__mark {
   background: var(--bbi-accent, #7c9cff);
   color: #fff;
+}
+
+.bbi-passage.is-other {
+  opacity: 0.6;
+}
+
+.bbi-passage.is-other .bbi-passage__mark {
+  flex-basis: auto;
+  padding: 0 6px;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--bbi-accent, #7c9cff) 40%, transparent);
 }
 
 .bbi-passage__text {

@@ -11,9 +11,9 @@ import { autoTagProfile, buildAutoTagMessages } from '@/autoTag/prompt';
 import { rebaseImagePositions, type RebaseReport } from '@/autoTag/rebase';
 import { buildSlotTaskNote } from '@/autoTag/slotPlan';
 import { withRewriteHint } from '@/rewriteHint/hint';
-import { passageTaskNote } from '@/rewriteHint/passage';
+import { focusImageCount, passageTaskNote } from '@/rewriteHint/passage';
 import { pinFocusPosition, placeSlotTag, slotExtraUpdate } from '@/rewriteHint/move';
-import { addFocusedTag, dropAddedMark, waitFloorIdle } from '@/rewriteHint/move';
+import { addFocusedTags, dropAddedMark, waitFloorIdle } from '@/rewriteHint/move';
 import {
   BBI_CHAR_EXTRA_KEY,
   CHAR_TAG_FIELDS,
@@ -328,8 +328,9 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
     // 单槽重写:协议强制「恰好 1 张」,并把该槽位当前提示词与其余槽位摘要带给模型
     // (锚住同一个画面、别抢别人的画面)。min/max 要同时覆盖 build 的规则文案与下面的
     // parse 校验,只改一处会自相矛盾。
+    const focusCount = slot ? 1 : focusImageCount(opts.focus); // fork:挑段落几组就几张
     const promptOptions = slot || opts.focus // fork:挑一段生图同样恰好 1 张
-      ? { ...settings.autoTag, minImages: 1, maxImages: 1 }
+      ? { ...settings.autoTag, minImages: focusCount, maxImages: focusCount }
       : settings.autoTag;
     // 协议形态开跑时快照一次:写协议、验收与收尾同一份,用户中途拨开关也不会前后不一
     const profile = autoTagProfile();
@@ -561,7 +562,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
           // fork:挑了段落就挪到那段后面(见 rewriteHint/move.ts),否则与上游一样原位替换
           return placeSlotTag(currentText, { chatId, floor, swipeId: markSwipeId, seq: slot.seq }, serializeImageTag(plan.images[0]), slot.hint);
         }
-        if (opts.add) return addFocusedTag(currentText, { chatId, floor, swipeId: markSwipeId }, serializeImageTag(plan.images[0]), opts.focus); // fork:再加一张
+        if (opts.add) return addFocusedTags(currentText, { chatId, floor, swipeId: markSwipeId }, plan.images.map(image => ({ tag: serializeImageTag(image), passageId: image.position }))); // fork:再加几张
         // replace 路径同样以当前正文为基底剔除旧 tag,不能用旧快照
         const base = opts.replace ? stripImageTags(currentText) : currentText;
         if (!plan.images.length) return base;

@@ -55,3 +55,33 @@ describe('再加一张 addFocusedTag', () => {
     dropAddedMark();
   });
 });
+
+describe('一次加几张 addFocusedTags', () => {
+  const text = ['第一段', T('a'), '第二段', T('b'), '第三段'].join('\n');
+
+  it('两张各插到自己那段后面,原有记录与新图标记按最终序号排', async () => {
+    const { addFocusedTags } = await import('./move');
+    const out = addFocusedTags(text, at, [
+      { tag: T('n3'), passageId: 'P3' },
+      { tag: T('n1'), passageId: 'P1' },
+    ]);
+    expect(out).toBe(['第一段', T('n1'), T('a'), '第二段', T('b'), '第三段', T('n3')].join('\n'));
+    const store = slotExtraUpdate(0).value as any;
+    expect(store['0'].ha[0].slotSeq).toBe(1);
+    expect(store['0'].hb[0].slotSeq).toBe(2);
+    expect(consumeAutoGenerate('c', 0, 0, 0)).toBe('force');
+    expect(consumeAutoGenerate('c', 0, 0, 3)).toBe('force');
+    expect(consumeAutoGenerate('c', 0, 0, 1)).toBeFalsy();
+    expect(consumeAutoGenerate('c', 0, 0, 2)).toBeFalsy();
+  });
+
+  it('写回失败撤掉全部新标记', async () => {
+    const { addFocusedTags } = await import('./move');
+    addFocusedTags(text, at, [
+      { tag: T('x'), passageId: 'P2' },
+      { tag: T('y'), passageId: 'P2' },
+    ]);
+    dropAddedMark();
+    for (let i = 0; i < 4; i++) expect(consumeAutoGenerate('c', 0, 0, i)).toBeFalsy();
+  });
+});

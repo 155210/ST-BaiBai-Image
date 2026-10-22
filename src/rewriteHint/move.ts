@@ -7,7 +7,7 @@ import { getContext } from '@/st/context';
 import { replaceImageTagAt, stripImageTags } from '@/st/imageTagRegex';
 import { settings } from '@/state/settings';
 
-import { PASSAGE_HINT_PREFIX } from './passage';
+import { focusGroups, PASSAGE_HINT_PREFIX } from './passage';
 
 /**
  * 「挑正文里的一段」重写后,把这张图挪到所选段落后面(本 fork 独有)。
@@ -195,7 +195,8 @@ export function followMovedSlot(at: { chatId: string; messageId: number; swipeId
 }
 
 /**
- * 还没 tag 的楼「挑一段生图」:不管模型把 position 放哪,都钉到所选最后一段。
+ * 「挑一段生图」:不管模型把 position 放哪,都钉到所选那组的最后一段。
+ * 一次挑了好几组时每张对一组:模型放在哪组里就归哪组,没放进任何组的按顺序补空着的组。
  * segments 是 runner 发给 AI 的那份(编号与用户看到的一致)。
  */
 export function pinFocusPosition(
@@ -203,55 +204,82 @@ export function pinFocusPosition(
   segments: Array<{ id: string; sourceLine: number }>,
   focus: string | undefined,
 ): void {
-  const ids = pickedPassageIds(focus);
-  const target = segments.find(s => s.id === ids[ids.length - 1]);
-  if (!target) return;
-  for (const image of images) {
+  const groups = focusGroups(focus);
+  if (!groups.length) return;
+  const owner = images.map(image => groups.findIndex(ids => ids.includes(image.position)));
+  const taken = new Set<number>();
+  owner.forEach((g, i) => {
+    if (g < 0 || taken.has(g)) owner[i] = -1;
+    else taken.add(g);
+  });
+  const free = groups.map((_, g) => g).filter(g => !taken.has(g));
+  images.forEach((image, i) => {
+    // 组比图少(只该出现在单组时)就都钉到最后一组
+    const g = owner[i] >= 0 ? owner[i] : (free.shift() ?? groups.length - 1);
+    const ids = groups[g];
+    const target = segments.find(s => s.id === ids[ids.length - 1]);
+    if (!target) return;
     image.position = target.id;
     image.sourceLine = target.sourceLine;
-  }
+  });
 }
 
 /* —— 已有图的楼「再加一张」—— */
 
-/** 加图的出图标记落在哪个序号(写回失败时撤掉它)。 */
-let addedMark: { chatId: string; floor: number; swipeId: number; seq: number } | null = null;
+/** 加图的出图标记落在哪些序号(写回失败时撤掉)。 */
+let addedMarks: Array<{ chatId: string; floor: number; swipeId: number; seq: number }> = [];
 
 /**
- * 已有图的楼再加一张:新 tag 插到所选最后一段后面,原有 tag 和图一张不动。
+ * 已有图的楼再加几张:每张新 tag 插到它那组段落(passageId)后面,原有 tag 和图一张不动。
  * 插在中间时后面那些 tag 的序号都要 +1,图片记录同一次写回里一起重排(见 slotExtraUpdate);
  * 本楼还有图在排队/生成、或段落对不上时,放到楼尾(序号不变,谁也不用挪)。
- * 新序号上挂 force 出图标记。runner 的 buildNext 里调用。
+ * 新图的最终序号上挂 force 出图标记。runner 的 buildNext 里调用。
  */
+export function addFocusedTags(
+  currentText: string,
+  at: { chatId: string; floor: number; swipeId: number },
+  added: Array<{ tag: string; passageId: string }>,
+): string {
+  pending = null;
+  const original = getContext()?.chat?.[at.floor]?.extra?.[BBI_IMAGE_EXTRA_KEY] as BbiImageStore | undefined;
+  let store = original;
+  let text = currentText;
+  const count = [...currentText.matchAll(/<bbi_image>[\s\S]+?<\/bbi_image>/gi)].length;
+  const busy = floorBusy(at.chatId, at.floor, at.swipeId, count);
+  const seqs: number[] = [];
+  for (const { tag, passageId } of added) {
+    const total = count + seqs.length;
+    const appended = `${text}${eolOf(text)}${tag}`;
+    const result = !busy ? moveTagAfterPassage(appended, total, tag, passageId, settings.excludes.customStripTags) : null;
+    const seq = result ? result.seq : total;
+    if (seq !== total) {
+      store = remapStore(store, at.swipeId, total, seq);
+      for (let i = 0; i < seqs.length; i++) seqs[i] = shiftedSeq(seqs[i], total, seq);
+    }
+    seqs.push(seq);
+    text = result ? result.text : appended;
+  }
+  if (store !== original) pending = { floor: at.floor, store };
+  addedMarks = seqs.map(seq => ({ ...at, seq }));
+  for (const seq of seqs) markForAutoGenerate(at.chatId, at.floor, at.swipeId, seq, 'force');
+  return text;
+}
+
+/** 只加一张(按要求里「这张图只画正文」那行的最后一段)。 */
 export function addFocusedTag(
   currentText: string,
   at: { chatId: string; floor: number; swipeId: number },
   nextTag: string,
   hint: string | undefined,
 ): string {
-  pending = null;
-  const count = [...currentText.matchAll(/<bbi_image>[\s\S]+?<\/bbi_image>/gi)].length;
-  const appended = `${currentText}${eolOf(currentText)}${nextTag}`;
   const ids = pickedPassageIds(hint);
-  const target = ids[ids.length - 1];
-  const result =
-    target && !floorBusy(at.chatId, at.floor, at.swipeId, count)
-      ? moveTagAfterPassage(appended, count, nextTag, target, settings.excludes.customStripTags)
-      : null;
-  const seq = result ? result.seq : count;
-  if (result && seq !== count) {
-    const store = getContext()?.chat?.[at.floor]?.extra?.[BBI_IMAGE_EXTRA_KEY] as BbiImageStore | undefined;
-    pending = { floor: at.floor, store: remapStore(store, at.swipeId, count, seq) };
-  }
-  markForAutoGenerate(at.chatId, at.floor, at.swipeId, seq, 'force');
-  addedMark = { ...at, seq };
-  return result ? result.text : appended;
+  return addFocusedTags(currentText, at, [{ tag: nextTag, passageId: ids[ids.length - 1] ?? '' }]);
 }
 
 /** 加图没写成:撤掉刚挂的出图标记。 */
 export function dropAddedMark(): void {
-  if (addedMark) consumeAutoGenerate(addedMark.chatId, addedMark.floor, addedMark.swipeId, addedMark.seq);
-  addedMark = null;
+  for (const mark of addedMarks) consumeAutoGenerate(mark.chatId, mark.floor, mark.swipeId, mark.seq);
+  addedMarks = [];
 }
 
 /** 等本楼正在排队/生成的图收尾(最多 maxMs),好把新图插到段落后面而不是楼尾。 */

@@ -82,3 +82,20 @@ describe('slotExtraUpdate', () => {
     expect(update.value).toBe(update.value);
   });
 });
+
+describe('pinFocusPosition 多组', () => {
+  const segments = [1, 2, 3, 4].map(n => ({ id: `P${n}`, sourceLine: n * 2 }));
+  const focus = ['第1张图只画正文 ⟦P1⟧⟦P2⟧ 这部分', '第2张图只画正文 ⟦P4⟧ 这部分'].join('\n');
+
+  it('模型放在哪组就归哪组,钉到那组最后一段', () => {
+    const images = [{ position: 'P4', sourceLine: 0 }, { position: 'P1', sourceLine: 0 }];
+    pinFocusPosition(images, segments, focus);
+    expect(images.map(i => i.position)).toEqual(['P4', 'P2']);
+  });
+
+  it('放错地方的按顺序补空着的组', () => {
+    const images = [{ position: 'P3', sourceLine: 0 }, { position: 'P3', sourceLine: 0 }];
+    pinFocusPosition(images, segments, focus);
+    expect(images.map(i => i.position)).toEqual(['P2', 'P4']);
+  });
+});
