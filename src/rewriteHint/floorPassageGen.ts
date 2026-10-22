@@ -8,7 +8,7 @@ import { hasImageTagTrace, parseImageTags } from '@/st/imageTagRegex';
 import { isCurrentChatExcluded, settings } from '@/state/settings';
 
 import { normalizeRewriteHint } from './hint';
-import { floorPassages, passageHint } from './passage';
+import { floorPassages, passageGroupsHint } from './passage';
 import PassageGenDialog from './PassageGenDialog.vue';
 
 /**
@@ -21,8 +21,8 @@ import PassageGenDialog from './PassageGenDialog.vue';
  */
 
 const BUTTON_CLASS = 'bbi-passage-gen-action';
-const TITLE_NEW = '挑一段生图（只按选中的段落画一张）';
-const TITLE_ADD = '再加一张图（挑段落，原来的图不动）';
+const TITLE_NEW = '挑段落生图（可分几组，每组一张）';
+const TITLE_ADD = '再加图（挑段落，可分几组，原来的图不动）';
 const ICON_CLASS = 'fa-crop-simple';
 // 与 index.ts 的 HOST_ID 一致
 const HOST_ID = 'bbi-app-host';
@@ -72,10 +72,11 @@ export function openPassageGenDialog(floor: number, onSubmit: (hint: string) => 
         configured: backendStatus().configured,
         closing,
         onClose: close,
-        onSubmit: (ids: string[], extra: string) => {
+        onSubmit: (groups: string[][], extra: string) => {
           if (closing) return;
-          const chosen = passages.filter(p => ids.includes(p.id));
-          const hint = normalizeRewriteHint([passageHint(chosen), extra].filter(s => s.trim()).join('\n'));
+          const chosen = groups.map(ids => passages.filter(p => ids.includes(p.id)));
+          // 段落那几行不截断(分组多时会超过要求的字数上限),只截用户另写的要求
+          const hint = [passageGroupsHint(chosen), normalizeRewriteHint(extra)].filter(s => s.trim()).join('\n');
           close();
           if (hint) onSubmit(hint);
         },

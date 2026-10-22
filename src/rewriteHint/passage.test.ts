@@ -63,3 +63,20 @@ describe('passageTaskNote', () => {
     expect(note).toContain('恰好返回 1 项');
   });
 });
+
+describe('分组挑段落', async () => {
+  const { focusGroups, focusImageCount, passageGroupsHint, passageHint, passageTaskNote } = await import('./passage');
+  const p = (n: number) => ({ id: `P${n}`, text: `第${n}段` });
+
+  it('一组时与单张的要求一字不差', () => {
+    expect(passageGroupsHint([[p(1)], []])).toBe(passageHint([p(1)]));
+    expect(focusImageCount(passageGroupsHint([[p(1)]]))).toBe(1);
+  });
+
+  it('多组每组一行,张数与任务备注跟着组数走', () => {
+    const hint = passageGroupsHint([[p(1), p(2)], [p(5)]]);
+    expect(focusGroups(`${hint}\n全身构图`)).toEqual([['P1', 'P2'], ['P5']]);
+    expect(focusImageCount(hint)).toBe(2);
+    expect(passageTaskNote(hint)).toContain('恰好返回 2 项');
+  });
+});
