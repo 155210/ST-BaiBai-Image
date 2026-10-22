@@ -13,6 +13,7 @@ import { buildSlotTaskNote } from '@/autoTag/slotPlan';
 import { withRewriteHint } from '@/rewriteHint/hint';
 import { passageTaskNote } from '@/rewriteHint/passage';
 import { pinFocusPosition, placeSlotTag, slotExtraUpdate } from '@/rewriteHint/move';
+import { addFocusedTag, dropAddedMark, waitFloorIdle } from '@/rewriteHint/move';
 import {
   BBI_CHAR_EXTRA_KEY,
   CHAR_TAG_FIELDS,
@@ -121,6 +122,8 @@ interface RunOptions {
   quiet?: boolean;
   /** fork:还没 tag 的楼「挑一段生图」——只为用户点选的段落画 1 张,见 rewriteHint/passage.ts。 */
   focus?: string;
+  /** fork:已有图的楼「再加一张」——配合 focus,新图插到所选段落后,原有 tag 与图不动。 */
+  add?: boolean;
 }
 
 /**
@@ -256,7 +259,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
   // 探测口径与按钮层同源(imageTagRegex.hasImageTagTrace):两侧漂移过一次——
   // 按钮只认开标签、这里认开也认闭,只剩 `</bbi_image>` 的楼就卡成「点了没反应」。
   // 单槽重写以「本楼已有 tag」为前提,不受此闸门拦截。
-  if (hasImageTagTrace(rawSource) && !opts.replace && !slot) {
+  if (hasImageTagTrace(rawSource) && !opts.replace && !slot && !opts.add) {
     abort(
       floor,
       'already-has-image-tag',
@@ -268,7 +271,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
   }
   // replace / slot:分析都基于剔除旧 tag 后的正文。写回时 replace 让旧 tag 随之消失,
   // slot 按 seq 原位替换——别的 tag 在写回基底里原样保留。
-  const source = opts.replace || slot ? stripImageTags(rawSource) : rawSource;
+  const source = opts.replace || slot || opts.add ? stripImageTags(rawSource) : rawSource;
   if (!source.trim()) {
     abort(floor, 'empty-source', notify, '本楼正文是空的（或只剩生图 tag），没有可分析的内容');
     return { kind: 'skipped' };
@@ -317,7 +320,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
     const memory = readBookMemory(floor, context.chat[floor]?.mes ?? '', context.name1);
     // 单槽重写:库文本要包含本楼已落档的增量(首次全量分析建的档),否则 AI 会把
     // 已建档角色当新人重写。charTagsBeforeFloor(floor + 1) 正好含本楼(swipe 匹配时生效)。
-    const entriesBefore = slot ? charTagsBeforeFloor(floor + 1) : charTagsBeforeFloor(floor);
+    const entriesBefore = slot || opts.add ? charTagsBeforeFloor(floor + 1) : charTagsBeforeFloor(floor);
     // 锁定名(全局库 ⊖ 本聊天基线):AI 的 changes 对这些名字一律无效,库文本里带 [locked] 标记
     const lockedNames = lockedCharTagNames();
     // 纯本地渲染:建档由主请求在同一次输出里完成(changes 的 field="new")
@@ -441,7 +444,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
 
     // 单槽重写不落 changes:首次全量分析已为整楼建过档,这里再应用一次只会产生
     // 重复的建档/变更记录;库文本已含本楼增量(见上面 entriesBefore),AI 照抄即可。
-    const planOps = slot ? [] : planChangeOps(plan);
+    const planOps = slot || opts.add ? [] : planChangeOps(plan);
     // 锁定角色(全局库)不接受 AI changes:丢弃,不写入楼层、不参与 @替换。
     // 重放侧 applyCharTagOps 也会按锁定名再拦一次(旧消息里可能已存这类 ops)。
     const effectiveOps = lockedNames.size
@@ -533,7 +536,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
     // 单槽重写是用户在卡片上的显式意图(同提示词编辑弹窗的「应用并重新生成」),
     // 不受 autoTag.autoGenerate 开关约束,一律 force 出图。
     const markSwipeId = message.swipe_id ?? 0;
-    const marked = plan.images.length > 0 && !opts.quiet && (settings.autoTag.autoGenerate || !!slot || !!opts.focus);
+    const marked = plan.images.length > 0 && !opts.quiet && !opts.add && (settings.autoTag.autoGenerate || !!slot || !!opts.focus);
     if (marked) {
       if (slot) {
         markForAutoGenerate(chatId, floor, markSwipeId, slot.seq, 'force');
@@ -546,6 +549,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
     // 正文在 buildNext 里基于「落盘那一刻的真实正文」现算:分析期间别的插件对正文的修改
     // (翻译/润色/追加状态栏/改写句子)全部保留,tag 按叙事行重新定位后照常注入。
     let rebaseNote = '';
+    if (opts.add) await waitFloorIdle(floor); // fork:加图等本楼正在出的图收尾再插
     const result = await applyMessageText(
       floor,
       currentText => {
@@ -557,6 +561,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
           // fork:挑了段落就挪到那段后面(见 rewriteHint/move.ts),否则与上游一样原位替换
           return placeSlotTag(currentText, { chatId, floor, swipeId: markSwipeId, seq: slot.seq }, serializeImageTag(plan.images[0]), slot.hint);
         }
+        if (opts.add) return addFocusedTag(currentText, { chatId, floor, swipeId: markSwipeId }, serializeImageTag(plan.images[0]), opts.focus); // fork:再加一张
         // replace 路径同样以当前正文为基底剔除旧 tag,不能用旧快照
         const base = opts.replace ? stripImageTags(currentText) : currentText;
         if (!plan.images.length) return base;
@@ -576,7 +581,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
       swipeId,
       message,
       // 单槽不写法:本楼角色增量与其它槽位图片都不归它管,不传 extraUpdate 即保持原样。
-      slot
+      slot || opts.add // fork:加图同样走图片记录重排
         ? slotExtraUpdate(floor) // fork:挪位置时图片记录的序号一起重排
         : {
             key: BBI_CHAR_EXTRA_KEY,
@@ -604,6 +609,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
       if (slot) consumeAutoGenerate(chatId, floor, markSwipeId, slot.seq);
       else clearAutoGenerateForFloor(chatId, floor);
     }
+    if (opts.add) dropAddedMark(); // fork:加图没写成就撤掉它的出图标记
     console.info(`[柏宝绘] 第 ${floor} 楼放弃写入生图 tag：${result}`);
     // 单槽重写的放弃原因与全量不同:正文其它部分改没改不重要,关键是这一条 tag 被改过
     if (slot && result === 'build-failed') {
@@ -620,6 +626,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
     // 异常发生在挂标记之后时(如保存失败回滚),撤销本楼标记,不留残留。
     // 单槽只撤自己那一枚:clearAutoGenerateForFloor 会连累同楼其它槽位的待消费标记。
     if (slot) consumeAutoGenerate(chatId, floor, swipeId ?? 0, slot.seq);
+    else if (opts.add) dropAddedMark(); // fork:加图只撤自己那枚
     else clearAutoGenerateForFloor(chatId, floor);
     if (controller.signal.aborted) return { kind: 'aborted' };
     const message = error instanceof Error ? error.message : String(error);
@@ -676,8 +683,8 @@ export async function requestFloorTags(
  * 一字不动,旧图留在该槽位历史里。本次 AI 输出的 changes 一律忽略(首次全量分析时已建档)。
  */
 /** fork:还没 tag 的楼「挑一段生图」,hint 是 passageHint 拼好的「只画这几段」要求。 */
-export async function requestFocusedTags(floor: number, hint: string): Promise<TagRunOutcome> {
-  return runForFloor(floor, { manual: true, focus: hint });
+export async function requestFocusedTags(floor: number, hint: string, add = false): Promise<TagRunOutcome> {
+  return runForFloor(floor, { manual: true, focus: hint, add });
 }
 
 export async function requestSlotTag(floor: number, seq: number, hint = ''): Promise<void> {

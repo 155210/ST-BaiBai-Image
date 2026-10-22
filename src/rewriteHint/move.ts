@@ -211,3 +211,59 @@ export function pinFocusPosition(
     image.sourceLine = target.sourceLine;
   }
 }
+
+/* —— 已有图的楼「再加一张」—— */
+
+/** 加图的出图标记落在哪个序号(写回失败时撤掉它)。 */
+let addedMark: { chatId: string; floor: number; swipeId: number; seq: number } | null = null;
+
+/**
+ * 已有图的楼再加一张:新 tag 插到所选最后一段后面,原有 tag 和图一张不动。
+ * 插在中间时后面那些 tag 的序号都要 +1,图片记录同一次写回里一起重排(见 slotExtraUpdate);
+ * 本楼还有图在排队/生成、或段落对不上时,放到楼尾(序号不变,谁也不用挪)。
+ * 新序号上挂 force 出图标记。runner 的 buildNext 里调用。
+ */
+export function addFocusedTag(
+  currentText: string,
+  at: { chatId: string; floor: number; swipeId: number },
+  nextTag: string,
+  hint: string | undefined,
+): string {
+  pending = null;
+  const count = [...currentText.matchAll(/<bbi_image>[\s\S]+?<\/bbi_image>/gi)].length;
+  const appended = `${currentText}${eolOf(currentText)}${nextTag}`;
+  const ids = pickedPassageIds(hint);
+  const target = ids[ids.length - 1];
+  const result =
+    target && !floorBusy(at.chatId, at.floor, at.swipeId, count)
+      ? moveTagAfterPassage(appended, count, nextTag, target, settings.excludes.customStripTags)
+      : null;
+  const seq = result ? result.seq : count;
+  if (result && seq !== count) {
+    const store = getContext()?.chat?.[at.floor]?.extra?.[BBI_IMAGE_EXTRA_KEY] as BbiImageStore | undefined;
+    pending = { floor: at.floor, store: remapStore(store, at.swipeId, count, seq) };
+  }
+  markForAutoGenerate(at.chatId, at.floor, at.swipeId, seq, 'force');
+  addedMark = { ...at, seq };
+  return result ? result.text : appended;
+}
+
+/** 加图没写成:撤掉刚挂的出图标记。 */
+export function dropAddedMark(): void {
+  if (addedMark) consumeAutoGenerate(addedMark.chatId, addedMark.floor, addedMark.swipeId, addedMark.seq);
+  addedMark = null;
+}
+
+/** 等本楼正在排队/生成的图收尾(最多 maxMs),好把新图插到段落后面而不是楼尾。 */
+export async function waitFloorIdle(floor: number, maxMs = 120_000): Promise<void> {
+  const context = getContext();
+  const chatId = context?.getCurrentChatId?.() ?? '';
+  const message = context?.chat?.[floor];
+  if (!chatId || !message) return;
+  const swipeId = message.swipe_id ?? 0;
+  const count = [...String(message.mes ?? '').matchAll(/<bbi_image>[\s\S]+?<\/bbi_image>/gi)].length;
+  const until = Date.now() + maxMs;
+  while (floorBusy(chatId, floor, swipeId, count) && Date.now() < until) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+}

@@ -9,7 +9,7 @@ import PassageList from './PassageList.vue';
 import type { Passage } from './passage';
 
 /**
- * 还没 tag 的楼「挑一段生图」弹窗(floorPassageGen.ts 命令式挂载,纪律同 PromptEditor:
+ * 楼层「挑一段生图」/「再加一张图」弹窗(floorPassageGen.ts 命令式挂载,纪律同 PromptEditor:
  * 状态一律走 props/emit,不用 ref 拿实例)。
  */
 const props = defineProps<{
@@ -17,6 +17,8 @@ const props = defineProps<{
   passages: Passage[];
   configured: boolean;
   closing?: boolean;
+  /** 本楼已有几张图;大于 0 就是「再加一张」 */
+  existing?: number;
 }>();
 
 const emit = defineEmits<{
@@ -56,9 +58,12 @@ onBeforeUnmount(() => {
   <ModalMask :open="open" top-layer @close="emit('close')">
     <div class="bbi-modal" role="dialog" aria-modal="true" aria-label="挑一段生图">
       <header class="bbi-modal-head">
-        <span class="bbi-modal-title">挑一段生图（第 {{ floor }} 楼）</span>
+        <span class="bbi-modal-title">{{ existing ? '再加一张图' : '挑一段生图' }}（第 {{ floor }} 楼）</span>
       </header>
-      <p class="bbi-passage-gen__tip">点选要画的段落（可多选），AI 只按这几段写一张图的提示词，写完直接出图。</p>
+      <p class="bbi-passage-gen__tip">
+        点选要画的段落（可多选），AI 只按这几段写一张图的提示词，写完直接出图。
+        <template v-if="existing">本楼已有 {{ existing }} 张图，新图会放在所选段落后面，原来的图不动。</template>
+      </p>
       <PassageList v-model="picked" :passages="passages" />
       <label class="bbi-passage-gen__extra">
         <span class="bbi-modal-label">另外的要求(可留空)</span>
@@ -81,7 +86,7 @@ onBeforeUnmount(() => {
           :title="configured ? '' : '请先在柏宝绘「渠道」页完成配置'"
           @click="emit('submit', picked, extra)"
         >
-          生成这一张{{ picked.length ? `（${picked.length} 段）` : '' }}
+          {{ existing ? '加这一张' : '生成这一张' }}{{ picked.length ? `（${picked.length} 段）` : '' }}
         </button>
       </footer>
     </div>
