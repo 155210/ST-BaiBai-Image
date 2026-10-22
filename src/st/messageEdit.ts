@@ -1,4 +1,5 @@
 import { getContext, type STContext, type STMessage } from '@/st/context';
+import { deferWhileGenerating } from '@/streamSafe/deferWhileGenerating';
 
 function findMessage(floor: number): HTMLElement | null {
   return document.querySelector<HTMLElement>(`#chat .mes[mesid="${floor}"]`);
@@ -31,6 +32,7 @@ function settleActiveEditor(floor: number, text: string): boolean {
 }
 
 async function emitMessageEvent(context: STContext, event: string | undefined, floor: number): Promise<void> {
+  if (event && deferWhileGenerating(context, floor, () => context.eventSource.emit?.(event, floor))) return; // fork:流式输出期间推迟通知
   if (event && context.eventSource.emit) await context.eventSource.emit(event, floor);
 }
 
@@ -44,6 +46,7 @@ async function refreshRenderedMessage(context: STContext, message: STMessage, fl
       // 局部刷新失败时再退回整段聊天重载。
     }
   }
+  if (deferWhileGenerating(context, floor, () => context.reloadCurrentChat?.())) return; // fork:流式输出期间不整段重载
   await context.reloadCurrentChat?.();
 }
 
