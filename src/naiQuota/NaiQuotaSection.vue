@@ -4,7 +4,7 @@ import { computed, onMounted, watch } from 'vue';
 import Collapsible from '@/components/Collapsible.vue';
 import { activeNaiEndpoint, effectiveNai, settings } from '@/state/settings';
 
-import { describeFreeLimits, estimateBoth, isOfficialUrl, quotaState, refreshNaiQuota } from './quota';
+import { batteryEmptyFor, describeBattery, describeFreeLimits, estimateBoth, isNaiV5, isOfficialUrl, quotaState, refreshNaiQuota } from './quota';
 
 /**
  * NAI 页「官方额度与 Anlas」(本 fork 独有):订阅档位、Anlas 余额、
@@ -20,9 +20,11 @@ const estimates = computed(() =>
         portraitSize: settings.nai.portraitSize,
         landscapeSize: settings.nai.landscapeSize,
         steps: settings.nai.steps,
+        model: settings.nai.model,
       })
     : [],
 );
+const batteryOut = computed(() => !!quota.value && batteryEmptyFor(quota.value, settings.nai.model));
 
 function formatDate(ms: number | null): string {
   if (!ms) return '';
@@ -61,6 +63,9 @@ watch(() => [activeNaiEndpoint().id, activeNaiEndpoint().key], refresh);
             <span class="nq-stat">
               Anlas：<b>{{ quota.anlas === null ? '查不到' : quota.anlas.toLocaleString() }}</b>
             </span>
+            <span v-if="quota.battery" class="nq-stat" :class="{ 'nq-error': quota.battery.empty }">
+              V5 免费电量：<b>{{ describeBattery(quota.battery) }}</b>
+            </span>
           </template>
           <span v-else-if="quotaState.loading" class="nq-stat">查询中…</span>
           <span v-else class="nq-stat nq-error">查询失败：{{ quotaState.error || '未知原因' }}</span>
@@ -72,10 +77,18 @@ watch(() => [activeNaiEndpoint().id, activeNaiEndpoint().key], refresh);
         <p class="bbi-field-hint">
           免费出图范围：{{ quota.freeLimits.length ? describeFreeLimits(quota) + '，一次 1 张' : '没有（只有 Opus 订阅有免费出图）' }}
         </p>
+        <div v-if="quota.battery" class="nq-bar" :title="`${Math.round(quota.battery.percent)}%`">
+          <div class="nq-bar-fill" :style="{ width: `${quota.battery.percent}%` }"></div>
+        </div>
+        <p v-if="quota.battery" class="bbi-field-hint">
+          Opus 出 V5 不扣 Anlas，但会耗这个电量（官方「利用上限」），会随时间自动回复；用完后再出 V5 就照常扣 Anlas。
+          <template v-if="!isNaiV5(settings.nai.model)">当前模型不是 V5，不耗电量。</template>
+        </p>
         <ul class="nq-est">
           <li v-for="e in estimates" :key="e.label" :class="{ 'is-paid': !e.free }">
             {{ e.label }} {{ e.width }}×{{ e.height }}、{{ e.steps }} 步：
             <b>{{ e.free ? '免费' : `每张约 ${e.cost} Anlas` }}</b>
+            <template v-if="!e.free && batteryOut">（电量用完）</template>
           </li>
         </ul>
       </template>
@@ -110,6 +123,19 @@ watch(() => [activeNaiEndpoint().id, activeNaiEndpoint().key], refresh);
 
 .nq-error {
   color: var(--bbi-danger, #d9534f);
+}
+
+.nq-bar {
+  height: 6px;
+  margin: 8px 0 2px;
+  border-radius: 3px;
+  background: var(--bbi-line);
+  overflow: hidden;
+}
+
+.nq-bar-fill {
+  height: 100%;
+  background: var(--bbi-accent, #d9a441);
 }
 
 .nq-est {
