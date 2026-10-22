@@ -1,5 +1,6 @@
 import type { TagRunOutcome } from '@/autoTag/runner';
 import type { BatchJob } from '@/batch/jobStore';
+import { isFreeOnlyBlock } from '@/naiQuota/tag';
 
 /**
  * 批量主循环(写 tag 与出图共用):逐楼调用 runFloor,计数、存进度、处理后台与停止。
@@ -15,7 +16,8 @@ import type { BatchJob } from '@/batch/jobStore';
  */
 
 export interface LoopDeps {
-  runFloor: (floor: number) => Promise<TagRunOutcome>;
+  /** pause:这楼照常记账,但记完就暂停(写 tag 接着出图时出图被「只用免费额度」拦下)。 */
+  runFloor: (floor: number) => Promise<TagRunOutcome & { pause?: string }>;
   currentChatId: () => string;
   /** 这一楼现在还该不该跑(写 tag:AI 楼且没 tag;出图:有没图的 tag)。开跑后用户可能手动处理过。 */
   isEligible: (floor: number) => boolean;
@@ -88,6 +90,12 @@ export async function runBatchLoop(
       return pause(job, deps, interrupted);
     }
 
+    // 「只用免费额度」拦下的图:后面每楼都会一样被拦,不记这楼、直接暂停(改设置后点继续从这楼重来)
+    if (outcome.kind === 'failed' && isFreeOnlyBlock(outcome.reason)) {
+      deps.persist(job);
+      return pause(job, deps, outcome.reason ?? '');
+    }
+
     if ((outcome.kind === 'failed' || outcome.kind === 'aborted') && wentHidden && hiddenRetries < options.maxHiddenRetries) {
       hiddenRetries++;
       await deps.waitVisible(signal);
@@ -101,6 +109,7 @@ export async function runBatchLoop(
     deps.persist(job);
     deps.onProgress?.(job, floor, outcome);
 
+    if (outcome.pause) return pause(job, deps, outcome.pause);
     if (consecutiveFails >= options.maxConsecutiveFails) {
       return pause(job, deps, `连续 ${consecutiveFails} 楼失败，已暂停。检查一下渠道设置，再点继续`);
     }

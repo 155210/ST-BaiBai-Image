@@ -34,6 +34,7 @@ import {
   vibeMetaFromData,
 } from '@/backends/vibeStore';
 import NaiArtistManager from '@/pages/backend/panels/NaiArtistManager.vue';
+import NaiQuotaSection from '@/naiQuota/NaiQuotaSection.vue';
 import { acquireNaiSlot } from '@/floor/genQueue';
 import { makeJpegThumbnail } from '@/st/imageFile';
 import { deleteUserImage } from '@/st/images';
@@ -939,6 +940,8 @@ async function removeVibe(vibe: NaiVibe) {
           </button>
         </div>
       </Collapsible>
+
+      <NaiQuotaSection /><!-- fork:官方额度与 Anlas -->
 
       <Collapsible title="提示词" :open="false">
         <!-- 画师串库:形制与 ComfyUI 工作流库一致,多一个「不使用」选项 -->

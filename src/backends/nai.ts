@@ -10,6 +10,7 @@ import {
 } from '@/backends/naiRateLimit';
 import { parseSize, pickSize, type Orientation } from '@/backends/size';
 import { clampVibeStrength, loadVibeData } from '@/backends/vibeStore';
+import { assertNaiFreeAllowed } from '@/naiQuota/quota';
 import type { GenerationArtist, GenerationMeta, GenerationParams, GenerationVibe } from '@/generationMeta';
 import type {
   NaiArtistPreset,
@@ -636,6 +637,7 @@ export async function generateNaiImage(
   // 画师串在发请求时解析一次，快照下来随图落盘：事后配方被删/改名也不丢。
   const artist = naiArtistUsage(nai);
   const params = buildNaiParameters(nai, values);
+  await assertNaiFreeAllowed(nai, params); // fork:「只用免费额度」开着时会扣 Anlas 的图不发
   const activeVibes = naiSupportsVibes(nai.model) ? nai.vibes.filter(vibe => vibe.enabled) : [];
   const loaded = new Map<string, NaiVibeData>();
   for (const vibe of activeVibes) {

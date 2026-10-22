@@ -7,6 +7,7 @@ import { notifyDone } from '@/batch/notify';
 import { clearJob, createJob, loadJob, saveJob, type BatchJob, type BatchKind } from '@/batch/jobStore';
 import { DEFAULT_LOOP_OPTIONS, runBatchLoop } from '@/batch/loop';
 import { saveAndVerify } from '@/batch/verifySaved';
+import { isFreeOnlyBlock } from '@/naiQuota/tag';
 import { isCurrentChatExcluded, settings } from '@/state/settings';
 import { getContext, isAiStoryMessage } from '@/st/context';
 import { hasImageTagTrace } from '@/st/imageTagRegex';
@@ -194,6 +195,8 @@ async function run(job: BatchJob, gapMs: number): Promise<void> {
             batchState.currentImaging = true;
             try {
               const image = await runImageFloor(floor, signal, 'all');
+              // 「只用免费额度」拦下的:后面每楼都一样会被拦,tag 记上这楼后整批暂停
+              if (image.kind === 'failed' && isFreeOnlyBlock(image.reason)) return { ...outcome, pause: image.reason ?? '' };
               if (image.kind === 'failed') log(`第 ${floor} 楼出图失败：${image.reason ?? '没有出图'}（跑完后会再补一轮）`);
             } finally {
               batchState.currentImaging = false;
