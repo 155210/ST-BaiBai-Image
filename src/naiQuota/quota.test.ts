@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { NAI_OFFICIAL_URL } from '@/state/settings';
 
-import { anlasCost, assertNaiFreeAllowed, estimateGen, isFreeGen, parseSubscription, quotaState } from './quota';
+import { anlasCost, assertNaiFreeAllowed, estimateGen, isFreeGen, parseSubscription, quotaState, refreshNaiQuota } from './quota';
 import { isFreeOnlyBlock } from './tag';
 
 const OPUS = {
@@ -96,6 +96,34 @@ describe('assertNaiFreeAllowed', () => {
     stubFetch({}, 500);
     const error = await assertNaiFreeAllowed(nai(true), { width: 832, height: 1216, steps: 28 }).catch(e => e);
     expect(isFreeOnlyBlock(error.message)).toBe(true);
+  });
+});
+
+describe('refreshNaiQuota', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    quotaState.quota = null;
+    quotaState.error = '';
+  });
+
+  it('查出图域名下的 /user/subscription(不带 /ai/),旧的 api 域名只作后备', async () => {
+    const urls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      urls.push(url);
+      return url === 'https://image.novelai.net/user/subscription'
+        ? new Response(JSON.stringify(OPUS), { status: 200 })
+        : new Response('{}', { status: 404 });
+    }));
+    const quota = await refreshNaiQuota({ url: NAI_OFFICIAL_URL, key: 'k' });
+    expect(urls).toEqual(['https://image.novelai.net/user/subscription']);
+    expect(quota?.tier).toBe(3);
+  });
+
+  it('都失败时报主地址的错,不报旧地址的 400', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+      new Response('{}', { status: url.startsWith('https://image.') ? 502 : 400 })));
+    await expect(refreshNaiQuota({ url: NAI_OFFICIAL_URL, key: 'k' })).rejects.toThrow('502');
+    expect(quotaState.error).toContain('502');
   });
 });
 
