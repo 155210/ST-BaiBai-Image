@@ -34,7 +34,22 @@ export interface NaiQuota {
   anlas: number | null;
   /** 免费出图范围;空数组 = 没有免费额度 */
   freeLimits: NaiFreeLimit[];
+  /** V5 的「利用上限」电量;接口没给返回 null */
+  battery: NaiBattery | null;
   fetchedAt: number;
+}
+
+/**
+ * Opus 出 V5 不扣 Anlas,但每张耗一点电量(官方「利用上限」条),随时间自动回复;
+ * 电量用完后再出 V5 就照常扣 Anlas。只管 V5,其他模型不耗电。
+ */
+export interface NaiBattery {
+  /** 剩余百分比 */
+  percent: number;
+  /** 用完了(或透支):出 V5 会扣 Anlas */
+  empty: boolean;
+  /** 再回 1% 还要多少秒;没给返回 null */
+  secondsToNext: number | null;
 }
 
 /** 免费出图的步数上限(官方前端写死 28 步,超过就扣 Anlas)。 */
@@ -69,6 +84,16 @@ export function parseSubscription(data: unknown, now = Date.now()): NaiQuota {
   const bought = num(steps?.purchasedTrainingSteps);
   const anlas = fixed === null && bought === null ? null : (fixed ?? 0) + (bought ?? 0);
   const expires = num(sub.expiresAt);
+  const usage = (o.usage ?? sub.usage) as Record<string, any> | undefined;
+  const percent = num(usage?.percent);
+  const battery: NaiBattery | null =
+    percent === null
+      ? null
+      : {
+          percent: Math.max(0, Math.min(100, percent)),
+          empty: percent <= 0 || usage?.isNegative === true,
+          secondsToNext: num(usage?.timeUntilNextPercent),
+        };
   return {
     tier,
     tierName: TIER_NAMES[tier] ?? `Tier ${tier}`,
@@ -77,6 +102,7 @@ export function parseSubscription(data: unknown, now = Date.now()): NaiQuota {
     expiresAt: expires && expires > 0 ? (expires < 1e12 ? expires * 1000 : expires) : null,
     anlas,
     freeLimits,
+    battery,
     fetchedAt: now,
   };
 }
@@ -88,8 +114,18 @@ export function anlasCost(width: number, height: number, steps: number, samples 
   return Math.max(2, each) * samples;
 }
 
-export function isFreeGen(quota: NaiQuota, width: number, height: number, steps: number, samples = 1): boolean {
+export function isNaiV5(model: string | undefined): boolean {
+  return String(model ?? '').includes('nai-diffusion-5');
+}
+
+/** V5 电量用完了:这时出 V5 不再免费。 */
+export function batteryEmptyFor(quota: NaiQuota, model?: string): boolean {
+  return isNaiV5(model) && quota.battery?.empty === true;
+}
+
+export function isFreeGen(quota: NaiQuota, width: number, height: number, steps: number, samples = 1, model?: string): boolean {
   if (steps > FREE_MAX_STEPS) return false;
+  if (batteryEmptyFor(quota, model)) return false;
   const pixels = width * height;
   return quota.freeLimits.some(l => pixels <= l.resolution && samples <= l.maxPrompts);
 }
@@ -102,17 +138,17 @@ export interface GenEstimate {
   cost: number;
 }
 
-export function estimateGen(quota: NaiQuota, width: number, height: number, steps: number): GenEstimate {
-  const free = isFreeGen(quota, width, height, steps);
+export function estimateGen(quota: NaiQuota, width: number, height: number, steps: number, model?: string): GenEstimate {
+  const free = isFreeGen(quota, width, height, steps, 1, model);
   return { width, height, steps, free, cost: free ? 0 : anlasCost(width, height, steps) };
 }
 
 /** 竖图、横图两种画幅各估一次(尺寸写错的那格跳过)。 */
-export function estimateBoth(quota: NaiQuota, nai: Pick<NaiSettings, 'portraitSize' | 'landscapeSize' | 'steps'>): Array<GenEstimate & { label: string }> {
+export function estimateBoth(quota: NaiQuota, nai: Pick<NaiSettings, 'portraitSize' | 'landscapeSize' | 'steps'> & { model?: string }): Array<GenEstimate & { label: string }> {
   const out: Array<GenEstimate & { label: string }> = [];
   for (const [label, orientation] of [['竖图', 'portrait'], ['横图', 'landscape']] as const) {
     const size = parseSize(pickSize(nai, orientation) || (orientation === 'portrait' ? '832×1216' : '1216×832'));
-    if (size) out.push({ label, ...estimateGen(quota, size.width, size.height, nai.steps) });
+    if (size) out.push({ label, ...estimateGen(quota, size.width, size.height, nai.steps, nai.model) });
   }
   return out;
 }
@@ -187,9 +223,13 @@ export async function refreshNaiQuota(nai: Pick<NaiSettings, 'url' | 'key'>, sig
   }
 }
 
-async function freshQuota(nai: Pick<NaiSettings, 'url' | 'key'>): Promise<NaiQuota | null> {
+/** 电量剩这么多以内就每张都重查:缓存那一分钟里可能正好用完。 */
+const LOW_BATTERY = 2;
+
+async function freshQuota(nai: Pick<NaiSettings, 'url' | 'key'> & { model?: string }): Promise<NaiQuota | null> {
   const cached = quotaState.quota;
-  if (cached && quotaState.key === nai.key.trim() && Date.now() - cached.fetchedAt < FRESH_MS) return cached;
+  const low = isNaiV5(nai.model) && cached?.battery != null && cached.battery.percent <= LOW_BATTERY;
+  if (cached && !low && quotaState.key === nai.key.trim() && Date.now() - cached.fetchedAt < FRESH_MS) return cached;
   return refreshNaiQuota(nai);
 }
 
@@ -199,7 +239,7 @@ async function freshQuota(nai: Pick<NaiSettings, 'url' | 'key'>): Promise<NaiQuo
  * 这张会扣 Anlas 时抛错,不发请求。查不到订阅状态也不发——宁可不出图,不能误扣。
  */
 export async function assertNaiFreeAllowed(
-  nai: Pick<NaiSettings, 'url' | 'key' | 'freeOnly'>,
+  nai: Pick<NaiSettings, 'url' | 'key' | 'freeOnly'> & { model?: string },
   params: { width?: unknown; height?: unknown; steps?: unknown; n_samples?: unknown },
 ): Promise<void> {
   if (!nai.freeOnly || !isOfficialUrl(nai.url)) return;
@@ -215,13 +255,26 @@ export async function assertNaiFreeAllowed(
     throw new Error(`${FREE_ONLY_TAG}查不到 NovelAI 订阅状态（${why}），为了不误扣 Anlas 没有出图`);
   }
   if (!quota) return;
-  if (isFreeGen(quota, width, height, steps, samples)) return;
-  const reason = quota.freeLimits.length
+  if (isFreeGen(quota, width, height, steps, samples, nai.model)) return;
+  const inRange = steps <= FREE_MAX_STEPS && quota.freeLimits.some(l => width * height <= l.resolution && samples <= l.maxPrompts);
+  const reason = inRange && batteryEmptyFor(quota, nai.model)
+    ? 'V5 免费电量用完了，等它回复后再出'
+    : quota.freeLimits.length
     ? `超出免费范围（${describeFreeLimits(quota)}）`
     : `${quota.tierName}${quota.active ? '' : '（未激活）'}没有免费出图额度`;
   throw new Error(
     `${FREE_ONLY_TAG}这张 ${width}×${height}、${steps} 步会扣约 ${anlasCost(width, height, steps, samples)} Anlas：${reason}。已开启「只用免费额度」，没有出图`,
   );
+}
+
+/** 「剩 45%，每天约回 11%」;回复速度按「再回 1% 要多久」折算。 */
+export function describeBattery(battery: NaiBattery): string {
+  const head = battery.empty ? '已用完，再出 V5 会扣 Anlas' : `剩 ${Math.round(battery.percent)}%`;
+  const t = battery.secondsToNext;
+  if (battery.percent >= 100 || !t || t <= 0) return head;
+  const perDay = 86400 / t;
+  const rate = perDay >= 1 ? `每天约回 ${Math.round(perDay)}%` : `约 ${Math.ceil(t / 3600)} 小时回 1%`;
+  return `${head}，${rate}`;
 }
 
 export function describeFreeLimits(quota: NaiQuota): string {

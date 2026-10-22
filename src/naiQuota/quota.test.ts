@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { NAI_OFFICIAL_URL } from '@/state/settings';
 
-import { anlasCost, assertNaiFreeAllowed, estimateGen, isFreeGen, parseSubscription, quotaState, refreshNaiQuota } from './quota';
+import { anlasCost, assertNaiFreeAllowed, describeBattery, estimateGen, isFreeGen, parseSubscription, quotaState, refreshNaiQuota } from './quota';
 import { isFreeOnlyBlock } from './tag';
 
 const OPUS = {
@@ -96,6 +96,39 @@ describe('assertNaiFreeAllowed', () => {
     stubFetch({}, 500);
     const error = await assertNaiFreeAllowed(nai(true), { width: 832, height: 1216, steps: 28 }).catch(e => e);
     expect(isFreeOnlyBlock(error.message)).toBe(true);
+  });
+});
+
+describe('V5 电量', () => {
+  const withBattery = (percent: number, extra: Record<string, unknown> = {}) =>
+    parseSubscription({ ...OPUS, usage: { percent, isNegative: false, timeUntilNextPercent: 7888, ...extra } });
+
+  it('解析 usage:剩余百分比、是否用完、回复速度', () => {
+    const q = withBattery(45);
+    expect(q.battery).toEqual({ percent: 45, empty: false, secondsToNext: 7888 });
+    expect(describeBattery(q.battery!)).toBe('剩 45%，每天约回 11%');
+    expect(parseSubscription(OPUS).battery).toBeNull();
+    expect(withBattery(3, { isNegative: true }).battery?.empty).toBe(true);
+  });
+
+  it('电量用完:V5 不再免费,其他模型不受影响', () => {
+    const q = withBattery(0);
+    expect(isFreeGen(q, 832, 1216, 28, 1, 'nai-diffusion-5-full')).toBe(false);
+    expect(isFreeGen(q, 832, 1216, 28, 1, 'nai-diffusion-4-5-full')).toBe(true);
+    expect(isFreeGen(withBattery(45), 832, 1216, 28, 1, 'nai-diffusion-5-full')).toBe(true);
+  });
+
+  it('开着「只用免费额度」时电量用完就拦,原因写清楚', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ...OPUS, usage: { percent: 0 } }), { status: 200 })));
+    const error = await assertNaiFreeAllowed(
+      { url: NAI_OFFICIAL_URL, key: 'k2', freeOnly: true, model: 'nai-diffusion-5-full' },
+      { width: 832, height: 1216, steps: 28 },
+    ).catch(e => e);
+    expect(isFreeOnlyBlock(error.message)).toBe(true);
+    expect(error.message).toContain('电量用完');
+    vi.unstubAllGlobals();
+    quotaState.quota = null;
+    quotaState.key = '';
   });
 });
 
