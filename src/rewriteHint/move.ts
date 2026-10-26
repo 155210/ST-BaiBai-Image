@@ -129,6 +129,11 @@ export function shiftedSeq(i: number, from: number, to: number): number {
   return without >= to ? without + 1 : without;
 }
 
+/** 别的写回路径(一起改几张)开始前清掉上一次没用完的待重排,免得 slotExtraUpdate 读到旧值。 */
+export function clearPendingMove(): void {
+  pending = null;
+}
+
 /** 本楼当前 swipe 的图片记录按新序号重排 slotSeq(返回新对象,不改原记录)。 */
 export function remapStore(store: BbiImageStore | undefined, swipeId: number, from: number, to: number): BbiImageStore | undefined {
   if (!store || from === to) return store;

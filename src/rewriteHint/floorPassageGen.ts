@@ -11,6 +11,7 @@ import { BBI_IMAGE_EXTRA_KEY, type BbiImageStore } from '@/floor/storage';
 
 import { normalizeRewriteHint } from './hint';
 import { imageAnchors } from './move';
+import { bindMultiRewriteButtons } from './floorMultiRewrite';
 import { drawnPassages } from './sources';
 import { floorPassages, passageGroupsHint } from './passage';
 import PassageGenDialog from './PassageGenDialog.vue';
@@ -45,18 +46,23 @@ function setRunning(button: HTMLElement, running: boolean): void {
 /** 段落 id → 紧跟在它后面的原有图(第几张 + 缩略图);楼头没有段落的记在空串下。 */
 export type ImageMarks = Record<string, Array<{ n: number; src?: string }>>;
 
+/** 本楼(当前 swipe)第 seq 张最新出好的那次图片路径,没出过返回 undefined。 */
+export function slotThumb(floor: number, seq: number): string | undefined {
+  const message = getContext()?.chat?.[floor];
+  const bucket = (message?.extra?.[BBI_IMAGE_EXTRA_KEY] as BbiImageStore | undefined)?.[String(message?.swipe_id ?? 0)] ?? {};
+  return Object.values(bucket)
+    .flat()
+    .filter(e => (e.slotSeq ?? 0) === seq && e.status === 'ready' && e.path)
+    .sort((a, b) => b.createdAt - a.createdAt)[0]?.path;
+}
+
 /** 「再加图」时标出本楼原来的图插在哪几段后面,带上每张最新出好的那次做缩略图。 */
 function existingImageMarks(floor: number): ImageMarks {
   const message = getContext()?.chat?.[floor];
   if (!message?.mes) return {};
-  const bucket = (message.extra?.[BBI_IMAGE_EXTRA_KEY] as BbiImageStore | undefined)?.[String(message.swipe_id ?? 0)] ?? {};
-  const entries = Object.values(bucket).flat();
   const marks: ImageMarks = {};
   for (const { passageId, seq } of imageAnchors(message.mes, settings.excludes.customStripTags)) {
-    const latest = entries
-      .filter(e => (e.slotSeq ?? 0) === seq && e.status === 'ready' && e.path)
-      .sort((a, b) => b.createdAt - a.createdAt)[0];
-    (marks[passageId] ??= []).push({ n: seq + 1, src: latest?.path });
+    (marks[passageId] ??= []).push({ n: seq + 1, src: slotThumb(floor, seq) });
   }
   return marks;
 }
@@ -226,5 +232,6 @@ export function bindPassageGenButtons(): boolean {
   bound = true;
   onChatMutation(syncButtons);
   syncButtons();
+  bindMultiRewriteButtons();
   return true;
 }

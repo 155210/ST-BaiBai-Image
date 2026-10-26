@@ -15,6 +15,7 @@ import { focusImageCount, passageTaskNote, regenImageOptions } from '@/rewriteHi
 import { pinFocusPosition, placeSlotTag, slotExtraUpdate } from '@/rewriteHint/move';
 import { addFocusedTags, dropAddedMark, waitFloorIdle } from '@/rewriteHint/move';
 import { commitFocusSources, rememberFocusSources } from '@/rewriteHint/sources';
+import { manySlotTaskNote, normalizeSlotEdits, replaceManySlots, slotSeqs, type SlotEdit } from '@/rewriteHint/multiRewrite';
 import {
   BBI_CHAR_EXTRA_KEY,
   CHAR_TAG_FIELDS,
@@ -115,7 +116,7 @@ interface RunOptions {
    * slotPlan.buildSlotTaskNote。分析基底同样剔除全部旧 tag,但强制输出恰好 1 张,
    * 且忽略本次 AI 的 changes(首次全量分析已为整楼建过档)。
    */
-  slot?: { seq: number; /** fork:用户写的重写要求,见 rewriteHint/。 */ hint?: string };
+  slot?: { seq: number; /** fork:用户写的重写要求,见 rewriteHint/。 */ hint?: string; /** fork:一起改几张 */ many?: SlotEdit[] };
   /**
    * 批量调用:不弹逐楼 toast(结果走返回值,由调用方汇总),也不挂自动出图标记——
    * 批量写的楼大多不在页面上,标记会一直挂到用户翻到那楼才突然出图。
@@ -331,7 +332,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
     // 单槽重写:协议强制「恰好 1 张」,并把该槽位当前提示词与其余槽位摘要带给模型
     // (锚住同一个画面、别抢别人的画面)。min/max 要同时覆盖 build 的规则文案与下面的
     // parse 校验,只改一处会自相矛盾。
-    const focusCount = slot ? 1 : focusImageCount(opts.focus); // fork:挑段落几组就几张
+    const focusCount = slot ? (slot.many?.length ?? 1) : focusImageCount(opts.focus); // fork:挑段落几组就几张
     const promptOptions = slot || opts.focus // fork:挑一段生图同样恰好 1 张
       ? { ...settings.autoTag, minImages: focusCount, maxImages: focusCount }
       : regenImageOptions(settings.autoTag, opts.count); // fork:重新生成时用户定的张数上限
@@ -344,7 +345,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
       memory,
       preparedTarget,
       anchors.text,
-      slot ? withRewriteHint(buildSlotTaskNote(rawSource, slot.seq), slot.hint) : opts.focus ? passageTaskNote(opts.focus) : '',
+      slot ? (slot.many ? manySlotTaskNote(rawSource, slot.many) : withRewriteHint(buildSlotTaskNote(rawSource, slot.seq), slot.hint)) : opts.focus ? passageTaskNote(opts.focus) : '',
       profile,
     );
     const channel = getTagGenChannel();
@@ -544,7 +545,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
     const marked = plan.images.length > 0 && !opts.quiet && !opts.add && (settings.autoTag.autoGenerate || !!slot || !!opts.focus);
     if (marked) {
       if (slot) {
-        markForAutoGenerate(chatId, floor, markSwipeId, slot.seq, 'force');
+        for (const seq of slotSeqs(slot)) markForAutoGenerate(chatId, floor, markSwipeId, seq, 'force'); // fork:一起改几张都要重出
       } else {
         for (let seq = 0; seq < plan.images.length; seq++) {
           markForAutoGenerate(chatId, floor, markSwipeId, seq, opts.focus ? 'force' : undefined); // fork:挑一段生图是显式意图
@@ -562,6 +563,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
         // 模型返回的 position 在这里刻意不参与——画面钉死在原位,它只负责重写内容。
         // 开跑时快照的原文对不上 = 期间被用户/别的流程改过,放弃覆盖(同提示词编辑弹窗)。
         if (slot) {
+          if (slot.many) return replaceManySlots(currentText, rawSource, slot.many, plan.images.map(serializeImageTag)); // fork:一起改几张
           if (parseImageTags(currentText)[slot.seq] !== slotRawTag) return null;
           // fork:挑了段落就挪到那段后面(见 rewriteHint/move.ts),否则与上游一样原位替换
           return placeSlotTag(currentText, { chatId, floor, swipeId: markSwipeId, seq: slot.seq }, serializeImageTag(plan.images[0]), slot.hint);
@@ -596,7 +598,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
     );
     if (result === 'saved') {
       if (slot) {
-        toastr.success(`已重写第 ${slot.seq + 1} 张的提示词，正在按新提示词出图`, '柏宝绘');
+        toastr.success(`已重写第 ${slotSeqs(slot).map(seq => seq + 1).join('、')} 张的提示词，正在按新提示词出图`, '柏宝绘'); // fork:一起改几张
         return { kind: 'written' };
       }
       recomputeCharTags();
@@ -612,7 +614,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
     }
     // 撤销标记只撤自己那一枚:clearAutoGenerateForFloor 会连累同楼其它槽位的待消费标记。
     if (marked) {
-      if (slot) consumeAutoGenerate(chatId, floor, markSwipeId, slot.seq);
+      if (slot) for (const seq of slotSeqs(slot)) consumeAutoGenerate(chatId, floor, markSwipeId, seq); // fork:撤掉这几张的标记
       else clearAutoGenerateForFloor(chatId, floor);
     }
     if (opts.add) dropAddedMark(); // fork:加图没写成就撤掉它的出图标记
@@ -631,7 +633,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
     processed.delete(identity);
     // 异常发生在挂标记之后时(如保存失败回滚),撤销本楼标记,不留残留。
     // 单槽只撤自己那一枚:clearAutoGenerateForFloor 会连累同楼其它槽位的待消费标记。
-    if (slot) consumeAutoGenerate(chatId, floor, swipeId ?? 0, slot.seq);
+    if (slot) for (const seq of slotSeqs(slot)) consumeAutoGenerate(chatId, floor, swipeId ?? 0, seq); // fork:异常时撤这几张
     else if (opts.add) dropAddedMark(); // fork:加图只撤自己那枚
     else clearAutoGenerateForFloor(chatId, floor);
     if (controller.signal.aborted) return { kind: 'aborted' };
@@ -696,6 +698,13 @@ export async function requestFocusedTags(floor: number, hint: string, add = fals
 /** fork:已有 tag 的楼「重新生成」:focus = 指定段落(几组几张),count = 不指定时最多几张。 */
 export async function requestRegenTags(floor: number, choice: { focus?: string; count?: number }): Promise<TagRunOutcome> {
   return runForFloor(floor, { manual: true, replace: true, focus: choice.focus, count: choice.count });
+}
+
+/** fork:同一楼一起改几张(各自的修改要求一次发给 AI),见 rewriteHint/multiRewrite.ts。 */
+export async function requestManySlotTags(floor: number, edits: SlotEdit[]): Promise<TagRunOutcome> {
+  const many = normalizeSlotEdits(edits);
+  if (!many.length) return { kind: 'none' };
+  return runForFloor(floor, { manual: true, slot: { seq: many[0].seq, hint: many[0].hint, many } });
 }
 
 export async function requestSlotTag(floor: number, seq: number, hint = ''): Promise<void> {
