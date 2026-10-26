@@ -73,6 +73,7 @@ beforeEach(() => {
   settings.enabled = true;
   settings.autoTag.heavyPreset = {
     enabled: true,
+    alwaysUse: false,
     name: 'p',
     entries: [
       {
@@ -135,9 +136,26 @@ describe('自动 tag 重试分层', () => {
 
     calls.length = 0;
     stubContext();
-    settings.autoTag.heavyPreset = { enabled: true, name: '', entries: [heavySlotEntry()], squash: false, extras: [] };
+    settings.autoTag.heavyPreset = { enabled: true, alwaysUse: false, name: '', entries: [heavySlotEntry()], squash: false, extras: [] };
     expect(settings.autoTag.heavyPreset.entries[0].id).toBe(HEAVY_SLOT_ID);
     await requestFloorTags(1, { quiet: true });
     expect(calls.map(c => c.messages)).toEqual([DEFAULT_CHAIN, DEFAULT_CHAIN]);
+  });
+
+  it('打开「直接用」时第一次就发重型提示词', async () => {
+    settings.autoTag.retryCount = 1;
+    settings.autoTag.heavyPreset.alwaysUse = true;
+    scriptRequests(['bad', 'bad']);
+    await requestFloorTags(1, { quiet: true });
+    expect(calls.map(c => c.messages)).toEqual([HEAVY_CHAIN, HEAVY_CHAIN]);
+    expect(calls[0].source).toContain('重型预设');
+  });
+
+  it('打开「直接用」但没有可用条目时仍用默认', async () => {
+    settings.autoTag.retryCount = 0;
+    settings.autoTag.heavyPreset = { enabled: true, alwaysUse: true, name: '', entries: [heavySlotEntry()], squash: false, extras: [] };
+    scriptRequests(['bad']);
+    await requestFloorTags(1, { quiet: true });
+    expect(calls.map(c => c.messages)).toEqual([DEFAULT_CHAIN]);
   });
 });

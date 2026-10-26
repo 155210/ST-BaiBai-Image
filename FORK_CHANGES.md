@@ -51,6 +51,7 @@
 | src/autoTag/runner.ts | withRewriteHint(buildSlotTaskNote(rawSource, slot.seq), slot.hint) | 要求拼进发给 AI 的任务备注 | #6 |
 | src/state/settings.ts | heavyPreset: normalizeHeavyPreset(rt.heavyPreset), | 重型自定义提示词设置字段、默认值与兜底 | #7 |
 | src/autoTag/runner.ts | const attemptMessages = attemptHeavy ? heavy : messages; | 解析失败后剩余重试改发酒馆预设拼装的消息链 | #7 |
+| src/autoTag/runner.ts | // fork:直接用重型预设 | 设置里开了「直接用重型提示词」时第一次就发重型 | 直接用重型预设 |
 | src/pages/settings/index.vue | <HeavyPresetPanel /> | 设置页挂「重型自定义提示词」面板 | #7 |
 | src/autoTag/prompt.test.ts | heavyPreset: heavyPresetDefaults(), | 测试夹具补新字段 | #7 |
 | src/api/client.ts | import { beginStream } from '@/stream/live' | 流式实时输出 | #8 |
@@ -139,7 +140,7 @@
 - `src/viewportFit/`：大图（聊天里的和图片浏览里的）按手机实际可见屏幕摆位置和高度，地址栏伸缩后底下不露黑屏、顶上按钮不被状态栏挡
 - `src/naiQuota/`：NAI 官方订阅额度与 Anlas 显示、每张费用估算、「只用免费额度」开关（批量遇到会直接暂停）
 - `src/rewriteHint/`：AI 重写提示词时可以写额外要求；「挑正文里的一段」点选本楼段落只画那几段；楼层「⋯」里有「挑一段生图」按钮（可一次挑几组段落、每组一张，只调一次 AI；已有图的楼是「再加图」，新图插到所选段落后、原来的图不动）；楼层「重新生成 tag」可以不指定段落并定最多几张，或指定段落几组几张；按段落出的图会记下是哪几段（消息 extra 的 bbiPassageSources），再加图时标在那几段上；有图的楼「⋯」里还有「一起改这层的图」，每张写修改要求、一次发给 AI 一起改；重写提示词时把每张图在正文里的位置一并报给 AI（slotPosition.ts），免得它自己推算
-- `src/autoTag/heavyPreset.ts`、`src/pages/settings/HeavyPresetPanel.vue`：解析失败时改用酒馆预设（重型自定义提示词）
+- `src/autoTag/heavyPreset.ts`、`src/pages/settings/HeavyPresetPanel.vue`：解析失败时改用酒馆预设（重型自定义提示词），也可以设成一开始就直接用
 - `src/stream/`：副 API 流式实时输出、无响应超时
 - `src/streamSafe/`：酒馆正在流式出字时，写完 tag 的楼层更新通知先排队，输出完再补发
 - `src/fork.guard.test.ts`、本文件
