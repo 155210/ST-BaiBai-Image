@@ -8,6 +8,8 @@ import { modalHost } from '@/state/ui';
 import LightboxNavButtons from '@/lightboxNav/LightboxNav.vue'; // fork:左右切换
 import type { LightboxNav } from '@/lightboxNav/types';
 import { useViewportFit } from '@/viewportFit/fit'; // fork:贴合可视区
+import ImageContextView from '@/imageContext/ImageContext.vue'; // fork:图前正文
+import type { ImageContextText } from '@/imageContext/before';
 
 /**
  * 图片灯箱(楼层卡片点击放大)。
@@ -42,6 +44,8 @@ const props = defineProps<{
   deletable?: boolean;
   /** fork:左右切换(src/lightboxNav/) */
   nav?: LightboxNav;
+  /** fork:图前面的几段正文(src/imageContext/) */
+  context?: ImageContextText | null;
 }>();
 
 const emit = defineEmits<{ close: []; delete: [] }>();
@@ -197,6 +201,7 @@ const promptText = computed(() => (props.prompt ?? '').trim());
         />
       </div>
 
+      <ImageContextView v-if="context" :context="context" />
       <p v-if="promptText" class="bbi-lightbox__prompt" @click.stop>{{ promptText }}</p>
       <LightboxNavButtons v-if="nav" :nav="nav" />
     </div>
