@@ -89,6 +89,8 @@ let timer: ReturnType<typeof setInterval> | null = null;
 export const streamView = reactive({
   /** 当前这条的编号:换了新请求面板就重新跟随。 */
   id: 0,
+  /** 给哪一楼写的(能按楼中断);别的用途为 undefined。 */
+  floor: undefined as number | undefined,
   source: '',
   text: '',
   running: false,
@@ -101,6 +103,7 @@ function flush(): void {
   if (!dirty) return;
   dirty = false;
   streamView.id = current?.id ?? 0;
+  streamView.floor = current?.floor;
   streamView.source = current?.source ?? '';
   streamView.text = liveText();
   streamView.running = !!current && !current.done;

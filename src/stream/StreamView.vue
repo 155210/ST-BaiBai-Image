@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onUnmounted, ref, watch } from 'vue';
 
+import { cancelFloorTags } from '@/autoTag/runner';
 import { copyText } from '@/st/clipboard';
 
 import { currentFullText, streamView, watchStream } from './live';
@@ -75,6 +76,10 @@ function resume(): void {
   void stickToBottom();
 }
 
+function stop(): void {
+  if (streamView.floor !== undefined) cancelFloorTags(streamView.floor);
+}
+
 async function copyAll(): Promise<void> {
   await copyText(currentFullText(), '实时输出已复制');
 }
@@ -105,6 +110,15 @@ onUnmounted(() => {
         <div class="bbi-stream-tools">
           <button v-if="!follow" class="bbi-btn bbi-btn-sm" type="button" @click="resume">停在这里了，回到最新</button>
           <span class="bbi-stream-spacer"></span>
+          <button
+            v-if="streamView.running && streamView.floor !== undefined"
+            class="bbi-btn bbi-btn-sm"
+            type="button"
+            title="中断这次写 tag，已收到的内容留着"
+            @click="stop"
+          >
+            中断
+          </button>
           <button class="bbi-btn bbi-btn-sm" type="button" :disabled="!streamView.text" @click="copyAll">复制全部</button>
         </div>
       </template>

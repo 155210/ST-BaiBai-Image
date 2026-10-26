@@ -36,6 +36,35 @@ const LEAVE_MS = 160;
 let bound = false;
 let closeCurrent: (() => void) | null = null;
 
+/**
+ * 上次在这一楼挑的段落(只在内存里)。没写成(失败、中断、AI 一张没给)时正文没变,
+ * 再打开就把上次的分组和要求带上,不用重选;写成了正文就变了,自然不再带。
+ */
+interface LastPick {
+  regen: boolean;
+  groups: string[][];
+  extra: string;
+  text: string;
+}
+const lastPicks = new Map<string, LastPick>();
+const MAX_PICKS = 20;
+
+function pickKey(floor: number): string {
+  return `${getContext()?.getCurrentChatId?.() ?? ''}\u0000${floor}`;
+}
+
+/** 正文没变、段落还在,才把上次的选择带回来。 */
+export function restorablePick(
+  last: LastPick | undefined,
+  text: string,
+  regen: boolean,
+  passageIds: string[],
+): { groups: string[][]; extra: string } | undefined {
+  if (!last || last.regen !== regen || last.text !== text) return undefined;
+  const groups = last.groups.map(group => group.filter(id => passageIds.includes(id))).filter(group => group.length);
+  return groups.length ? { groups, extra: last.extra } : undefined;
+}
+
 function setRunning(button: HTMLElement, running: boolean): void {
   button.dataset.running = running ? '1' : '';
   button.classList.toggle(ICON_CLASS, !running);
@@ -82,6 +111,9 @@ export function openPassageGenDialog(floor: number, handlers: DialogHandlers, ex
   if (!root) return;
   closeCurrent?.();
   const passages = floorPassages(floor);
+  const key = pickKey(floor);
+  const text = getContext()?.chat?.[floor]?.mes ?? '';
+  const initial = restorablePick(lastPicks.get(key), text, regenMax !== undefined, passages.map(p => p.id));
   const marks = existing > 0 ? existingImageMarks(floor) : {};
   const drawn = existing > 0 ? drawnPassages(floor) : {};
   const container = document.createElement('div');
@@ -117,6 +149,7 @@ export function openPassageGenDialog(floor: number, handlers: DialogHandlers, ex
         regenMax,
         marks,
         drawn,
+        initial,
         configured: backendStatus().configured,
         closing,
         onClose: close,
@@ -125,6 +158,9 @@ export function openPassageGenDialog(floor: number, handlers: DialogHandlers, ex
           const chosen = groups.map(ids => passages.filter(p => ids.includes(p.id)));
           // 段落那几行不截断(分组多时会超过要求的字数上限),只截用户另写的要求
           const hint = [passageGroupsHint(chosen), normalizeRewriteHint(extra)].filter(s => s.trim()).join('\n');
+          lastPicks.delete(key);
+          lastPicks.set(key, { regen: regenMax !== undefined, groups, extra, text });
+          while (lastPicks.size > MAX_PICKS) lastPicks.delete(lastPicks.keys().next().value as string);
           settled = true;
           close();
           if (hint) handlers.onSubmit(hint);

@@ -1,5 +1,6 @@
 import { onChatMutation } from '@/floor/chatObserver';
 import { getContext } from '@/st/context';
+import { cancelFloorTags } from '@/autoTag/runner';
 import { copyText } from '@/st/clipboard';
 
 import { floorStreams, onStreamsChange, REFRESH_MS, tailText, type Live } from './live';
@@ -36,6 +37,7 @@ interface Panel {
   toggle: HTMLElement;
   tools: HTMLElement;
   resume: HTMLElement;
+  stop: HTMLElement;
   pre: HTMLElement;
   text: Text;
   open: boolean;
@@ -84,6 +86,7 @@ function render(panel: Panel): void {
   const title = titleOf(live);
   if (panel.title.textContent !== title) panel.title.textContent = title;
   panel.resume.hidden = panel.follow;
+  panel.stop.hidden = live.done;
   // 写完且已画到最后:停掉刷新定时器
   if (live.done && live.total === panel.shownTotal && panel.timer) {
     clearInterval(panel.timer);
@@ -151,19 +154,28 @@ function createPanel(floor: number, live: Live): Panel {
   resume.type = 'button';
   resume.textContent = '停在这里了，回到最新';
   resume.hidden = true;
+  const stop = document.createElement('button');
+  stop.type = 'button';
+  stop.textContent = '中断';
+  stop.title = '中断这次写 tag，已收到的内容留着';
+  stop.hidden = live.done;
   const copy = document.createElement('button');
   copy.type = 'button';
   copy.textContent = '复制全部';
-  tools.append(resume, copy);
+  tools.append(resume, stop, copy);
   el.append(head, pre, tools);
 
-  const panel: Panel = { floor, live, el, meta, title, toggle, tools, resume, pre, text, open: false, timer: null, shownTotal: -1, follow: true };
+  const panel: Panel = { floor, live, el, meta, title, toggle, tools, resume, stop, pre, text, open: false, timer: null, shownTotal: -1, follow: true };
   pre.addEventListener('scroll', () => onPanelScroll(panel), { passive: true });
   resume.addEventListener('click', event => {
     event.stopPropagation();
     panel.follow = true;
     panel.shownTotal = -1;
     render(panel);
+  });
+  stop.addEventListener('click', event => {
+    event.stopPropagation();
+    if (panel.live.chatId === (getContext()?.getCurrentChatId?.() ?? '')) cancelFloorTags(panel.floor);
   });
   copy.addEventListener('click', event => {
     event.stopPropagation();
