@@ -61,7 +61,13 @@
 | src/pages/settings/index.vue | 开了之后，正在写 tag 的楼层下面 | 流式说明 | #8 |
 | src/floor/promptEditor.ts | options.regenerate && consumeAutoGenerate( | 图片浏览里 AI 重写完自己出图（楼层不在页面上时没有卡片认领标记） | #15 |
 | src/floor/promptEditor.ts | setPassageFloor(options.at.messageId); | 提示词弹窗告诉「挑正文里的一段」是哪一楼 | 挑段落生图 |
-| src/autoTag/runner.ts | import { focusImageCount, passageTaskNote } from '@/rewriteHint/passage'; | 引入「挑一段生图」任务备注与张数 | 挑一段生图 |
+| src/autoTag/runner.ts | import { focusImageCount, passageTaskNote, regenImageOptions } from '@/rewriteHint/passage'; | 引入「挑一段生图」任务备注与张数 | 挑一段生图 |
+| src/autoTag/runner.ts | count?: number; | 运行选项：重新生成时用户定的最多几张 | 重新生成可选段落 |
+| src/autoTag/runner.ts | // fork:重新生成时用户定的张数上限 | 同上：覆盖设置里的上限 | 重新生成可选段落 |
+| src/autoTag/runner.ts | export async function requestRegenTags( | 同上：入口（指定段落或最多几张） | 重新生成可选段落 |
+| src/floor/actionButton.ts | import { requestFloorTags, requestRegenTags } from '@/autoTag/runner'; | 同上：引入入口 | 重新生成可选段落 |
+| src/floor/actionButton.ts | import { chooseRegen } from '@/rewriteHint/floorPassageGen'; | 同上：引入弹窗 | 重新生成可选段落 |
+| src/floor/actionButton.ts | // fork:重新生成可以指定段落或定最多几张 | 同上：原来的确认窗换成选择弹窗 | 重新生成可选段落 |
 | src/autoTag/runner.ts | // fork:挑段落几组就几张 | 一次挑几组段落、每组一张，只调一次 AI | 一次挑几组 |
 | src/autoTag/runner.ts | focus?: string; | 运行选项：只为用户点选的段落画 1 张 | 挑一段生图 |
 | src/autoTag/runner.ts | // fork:挑一段生图同样恰好 1 张 | 同上：恰好 1 张 | 挑一段生图 |
@@ -114,7 +120,7 @@
 - `src/state/backup.ts`、`src/pages/settings/BackupSection.vue`：导出 / 导入设置
 - `src/lightboxNav/`、`src/batch/galleryLightbox.ts`、`src/pages/batch/EmptySlotView.vue`：图片浏览大图左右切换
 - `src/naiQuota/`：NAI 官方订阅额度与 Anlas 显示、每张费用估算、「只用免费额度」开关（批量遇到会直接暂停）
-- `src/rewriteHint/`：AI 重写提示词时可以写额外要求；「挑正文里的一段」点选本楼段落只画那几段；楼层「⋯」里有「挑一段生图」按钮（可一次挑几组段落、每组一张，只调一次 AI；已有图的楼是「再加图」，新图插到所选段落后、原来的图不动）
+- `src/rewriteHint/`：AI 重写提示词时可以写额外要求；「挑正文里的一段」点选本楼段落只画那几段；楼层「⋯」里有「挑一段生图」按钮（可一次挑几组段落、每组一张，只调一次 AI；已有图的楼是「再加图」，新图插到所选段落后、原来的图不动）；楼层「重新生成 tag」可以不指定段落并定最多几张，或指定段落几组几张
 - `src/autoTag/heavyPreset.ts`、`src/pages/settings/HeavyPresetPanel.vue`：解析失败时改用酒馆预设（重型自定义提示词）
 - `src/stream/`：副 API 流式实时输出、无响应超时
 - `src/streamSafe/`：酒馆正在流式出字时，写完 tag 的楼层更新通知先排队，输出完再补发

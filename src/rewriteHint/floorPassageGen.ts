@@ -38,8 +38,17 @@ function setRunning(button: HTMLElement, running: boolean): void {
   button.classList.toggle('fa-spin', running);
 }
 
-/** 打开挑段落弹窗;选好后跑 onSubmit(弹窗先关,写 tag 与出图在后台继续)。 */
-export function openPassageGenDialog(floor: number, onSubmit: (hint: string) => void, existing = 0): void {
+interface DialogHandlers {
+  /** 挑好段落:hint 是拼好的「第 N 张图只画正文」要求 */
+  onSubmit: (hint: string) => void;
+  /** 重新生成不指定段落:最多几张 */
+  onAuto?: (count: number) => void;
+  /** 没选就关了 */
+  onCancel?: () => void;
+}
+
+/** 打开挑段落弹窗;选好后跑回调(弹窗先关,写 tag 与出图在后台继续)。regenMax 给了就是「重新生成」。 */
+export function openPassageGenDialog(floor: number, handlers: DialogHandlers, existing = 0, regenMax?: number): void {
   const root = document.getElementById(HOST_ID)?.shadowRoot;
   if (!root) return;
   closeCurrent?.();
@@ -48,9 +57,14 @@ export function openPassageGenDialog(floor: number, onSubmit: (hint: string) => 
   root.appendChild(container);
   let closing = false;
   let closed = false;
+  let settled = false;
 
   const close = () => {
     if (closeCurrent !== close) return;
+    if (!settled) {
+      settled = true;
+      handlers.onCancel?.();
+    }
     closeCurrent = null;
     closing = true;
     paint();
@@ -69,6 +83,7 @@ export function openPassageGenDialog(floor: number, onSubmit: (hint: string) => 
         floor,
         passages,
         existing,
+        regenMax,
         configured: backendStatus().configured,
         closing,
         onClose: close,
@@ -77,8 +92,15 @@ export function openPassageGenDialog(floor: number, onSubmit: (hint: string) => 
           const chosen = groups.map(ids => passages.filter(p => ids.includes(p.id)));
           // 段落那几行不截断(分组多时会超过要求的字数上限),只截用户另写的要求
           const hint = [passageGroupsHint(chosen), normalizeRewriteHint(extra)].filter(s => s.trim()).join('\n');
+          settled = true;
           close();
-          if (hint) onSubmit(hint);
+          if (hint) handlers.onSubmit(hint);
+        },
+        onAuto: (count: number) => {
+          if (closing) return;
+          settled = true;
+          close();
+          handlers.onAuto?.(count);
         },
       }),
       container,
@@ -104,12 +126,33 @@ function onActivate(button: HTMLElement): void {
   const add = existing > 0 || hasImageTagTrace(message.mes ?? '');
   openPassageGenDialog(
     floor,
-    hint => {
-      setRunning(button, true);
-      void requestFocusedTags(floor, hint, add).finally(() => setRunning(button, false));
+    {
+      onSubmit: hint => {
+        setRunning(button, true);
+        void requestFocusedTags(floor, hint, add).finally(() => setRunning(button, false));
+      },
     },
     existing,
   );
+}
+
+/**
+ * 已有 tag 的楼按「重新生成」(上游 actionButton 的确认窗换成这个):
+ * 不指定段落 → { count }(最多几张,覆盖设置的上限);指定段落 → { focus }(几组几张);取消 → null。
+ */
+export function chooseRegen(floor: number): Promise<{ focus?: string; count?: number } | null> {
+  return new Promise(resolve => {
+    openPassageGenDialog(
+      floor,
+      {
+        onSubmit: focus => resolve({ focus }),
+        onAuto: count => resolve({ count }),
+        onCancel: () => resolve(null),
+      },
+      0,
+      settings.autoTag.maxImages,
+    );
+  });
 }
 
 function createButton(): HTMLDivElement {

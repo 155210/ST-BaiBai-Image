@@ -109,3 +109,13 @@ export function passageTaskNote(hint: string): string {
     '只为这部分正文画 1 张图：images 数组必须恰好返回 1 项，position 选在用户指定的段落里，不要画其它段落的场景。',
   ].join('\n');
 }
+
+/**
+ * 楼层「重新生成」不指定段落时:用户填的「最多几张」覆盖设置里的上限(不设封顶),
+ * 下限跟着收,免得下限比上限还大。没填就原样用设置。
+ */
+export function regenImageOptions<T extends { minImages: number; maxImages: number }>(base: T, count: number | undefined): T {
+  const max = Math.floor(Number(count));
+  if (!Number.isFinite(max) || max < 1) return base;
+  return { ...base, maxImages: max, minImages: Math.min(Math.max(0, Math.floor(Number(base.minImages)) || 0), max) };
+}

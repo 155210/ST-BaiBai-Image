@@ -1,5 +1,5 @@
-import { requestFloorTags } from '@/autoTag/runner';
-import { confirmDialog } from '@/components/confirm';
+import { requestFloorTags, requestRegenTags } from '@/autoTag/runner';
+import { chooseRegen } from '@/rewriteHint/floorPassageGen';
 import { ensureChatObserver, onChatMutation } from '@/floor/chatObserver';
 import { isCurrentChatExcluded, settings } from '@/state/settings';
 import { getContext, isAiStoryMessage } from '@/st/context';
@@ -55,18 +55,13 @@ async function onActivate(button: HTMLElement): Promise<void> {
   }
 
   const hasTags = hasImageTagTrace(message.mes ?? '');
-  if (hasTags) {
-    const ok = await confirmDialog({
-      title: '重新生成 tag',
-      text: '本楼已有生图 tag。重新生成会先删除原 tag 再写入新的；已生成的图片保留在卡片历史里，不会丢失。',
-      confirmText: '重新生成',
-    });
-    if (!ok) return;
-  }
+  // fork:重新生成可以指定段落或定最多几张(rewriteHint/floorPassageGen.ts),取消返回 null
+  const regen = hasTags ? await chooseRegen(floor) : null;
+  if (hasTags && !regen) return;
 
   setRunning(button, true);
   try {
-    await requestFloorTags(floor, { replace: hasTags });
+    await (regen ? requestRegenTags(floor, regen) : requestFloorTags(floor, { replace: hasTags }));
   } finally {
     // 运行期间 ST 可能已重渲染移除本按钮;对脱离 DOM 的元素改 class 是安全无操作
     setRunning(button, false);
