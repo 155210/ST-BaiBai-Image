@@ -14,6 +14,7 @@ import { withRewriteHint } from '@/rewriteHint/hint';
 import { focusImageCount, passageTaskNote, regenImageOptions } from '@/rewriteHint/passage';
 import { pinFocusPosition, placeSlotTag, slotExtraUpdate } from '@/rewriteHint/move';
 import { addFocusedTags, dropAddedMark, waitFloorIdle } from '@/rewriteHint/move';
+import { commitFocusSources, rememberFocusSources } from '@/rewriteHint/sources';
 import {
   BBI_CHAR_EXTRA_KEY,
   CHAR_TAG_FIELDS,
@@ -444,6 +445,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
     }
 
     if (opts.focus) pinFocusPosition(plan.images, preparedTarget.segments, opts.focus); // fork:图钉到所选段落后
+    if (opts.focus) rememberFocusSources(floor, plan.images, preparedTarget.segments, opts.focus); // fork:记下每张图按哪几段出的
 
     // 单槽重写不落 changes:首次全量分析已为整楼建过档,这里再应用一次只会产生
     // 重复的建档/变更记录;库文本已含本楼增量(见上面 entriesBefore),AI 照抄即可。
@@ -565,6 +567,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
           return placeSlotTag(currentText, { chatId, floor, swipeId: markSwipeId, seq: slot.seq }, serializeImageTag(plan.images[0]), slot.hint);
         }
         if (opts.add) return addFocusedTags(currentText, { chatId, floor, swipeId: markSwipeId }, plan.images.map(image => ({ tag: serializeImageTag(image), passageId: image.position }))); // fork:再加几张
+        if (opts.focus) commitFocusSources(floor, markSwipeId); // fork:段落记录随这次写回存盘
         // replace 路径同样以当前正文为基底剔除旧 tag,不能用旧快照
         const base = opts.replace ? stripImageTags(currentText) : currentText;
         if (!plan.images.length) return base;

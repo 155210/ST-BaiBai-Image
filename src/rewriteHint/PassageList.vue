@@ -13,6 +13,8 @@ const props = defineProps<{
   labels?: Record<string, string>;
   /** 原来的图插在哪:段落 id → 跟在它后面的图(楼头的记在空串下) */
   marks?: Record<string, Array<{ n: number; src?: string }>>;
+  /** 这段出过哪几张(按段落记下来的) */
+  drawn?: Record<string, number[]>;
 }>();
 
 const emit = defineEmits<{ (e: 'update:modelValue', value: string[]): void }>();
@@ -46,6 +48,7 @@ function toggle(id: string): void {
       >
         <span class="bbi-passage__mark">{{ modelValue.includes(p.id) ? '✓' : (labels?.[p.id] ?? p.id.slice(1)) }}</span>
         <span class="bbi-passage__text">{{ p.text }}</span>
+        <span v-if="drawn?.[p.id]?.length" class="bbi-passage__drawn">出过第 {{ drawn[p.id].join('、') }} 张</span>
       </button>
     </li>
     <li v-if="marks?.[p.id]?.length" class="bbi-passage-marks">
@@ -123,6 +126,18 @@ function toggle(id: string): void {
   padding: 0 6px;
   border-radius: 11px;
   background: color-mix(in srgb, var(--bbi-accent, #7c9cff) 40%, transparent);
+}
+
+.bbi-passage__drawn {
+  flex: 0 0 auto;
+  align-self: center;
+  max-width: 7em;
+  padding: 1px 6px;
+  border: 1px solid color-mix(in srgb, var(--bbi-accent, #7c9cff) 60%, transparent);
+  border-radius: 10px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  text-align: center;
 }
 
 /* 原来的图插在这段后面 */

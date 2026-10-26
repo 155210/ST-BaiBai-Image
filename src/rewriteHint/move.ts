@@ -8,6 +8,7 @@ import { replaceImageTagAt, stripImageTags } from '@/st/imageTagRegex';
 import { settings } from '@/state/settings';
 
 import { focusGroups, PASSAGE_HINT_PREFIX } from './passage';
+import { commitFocusSources, recordSlotSources } from './sources';
 
 /**
  * 「挑正文里的一段」重写后,把这张图挪到所选段落后面(本 fork 独有)。
@@ -173,6 +174,10 @@ export function placeSlotTag(
   const ids = pickedPassageIds(hint);
   const target = ids[ids.length - 1];
   const count = [...currentText.matchAll(/<bbi_image>[\s\S]+?<\/bbi_image>/gi)].length;
+  if (ids.length) {
+    const segments = prepareTargetText(stripImageTags(currentText), settings.excludes.customStripTags).segments;
+    recordSlotSources(at.floor, at.swipeId, nextTag, ids.map(id => segments.find(s => s.id === id)?.text ?? '').filter(Boolean));
+  }
   const result =
     target && !floorBusy(at.chatId, at.floor, at.swipeId, count)
       ? moveTagAfterPassage(currentText, at.seq, nextTag, target, settings.excludes.customStripTags)
@@ -285,6 +290,7 @@ export function addFocusedTags(
     text = result ? result.text : appended;
   }
   if (store !== original) pending = { floor: at.floor, store };
+  commitFocusSources(at.floor, at.swipeId);
   addedMarks = seqs.map(seq => ({ ...at, seq }));
   for (const seq of seqs) markForAutoGenerate(at.chatId, at.floor, at.swipeId, seq, 'force');
   return text;

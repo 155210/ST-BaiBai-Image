@@ -25,6 +25,8 @@ const props = defineProps<{
   regenMax?: number;
   /** 再加图时:原来的图插在哪几段后面 */
   marks?: ImageMarks;
+  /** 再加图时:哪几段出过第几张 */
+  drawn?: Record<string, number[]>;
 }>();
 
 const emit = defineEmits<{
@@ -140,7 +142,7 @@ onBeforeUnmount(() => {
       <template v-else>
       <p class="bbi-passage-gen__tip">
         点选要画的段落（可多选）就是一张图；想多出几张，点「＋ 再分一张」接着挑下一组。几张一起只问一次 AI，写完直接出图。
-        <template v-if="existing && !regen">本楼已有 {{ existing }} 张图（列表里标了各插在哪段后面），新图会放在各自段落后面，原来的图不动。</template>
+        <template v-if="existing && !regen">本楼已有 {{ existing }} 张图（列表里标了各插在哪段后面；按段落出的会在那几段上标「出过第 N 张」），新图会放在各自段落后面，原来的图不动。</template>
       </p>
       <div ref="strip" class="bbi-passage-gen__groups" role="tablist">
         <button
@@ -170,7 +172,7 @@ onBeforeUnmount(() => {
           删掉图{{ current + 1 }}
         </button>
       </div>
-      <PassageList v-model="picked" class="bbi-passage-gen__list" :passages="passages" :labels="labels" :marks="marks" />
+      <PassageList v-model="picked" class="bbi-passage-gen__list" :passages="passages" :labels="labels" :marks="marks" :drawn="drawn" />
       <label class="bbi-passage-gen__extra">
         <span class="bbi-modal-label">另外的要求(可留空)</span>
         <BbiTextarea
