@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted } from 'vue';
+import { onBeforeUnmount, onMounted, ref } from 'vue';
 
 import LightboxNavButtons from '@/lightboxNav/LightboxNav.vue';
 import type { LightboxNav } from '@/lightboxNav/types';
 import { modalHost } from '@/state/ui';
+import { useViewportFit } from '@/viewportFit/fit';
 
 /**
  * 图片浏览大图模式里切到「还没有图」的卡片时显示这个(本 fork 新增)。
@@ -28,13 +29,15 @@ function onKeydown(event: KeyboardEvent): void {
     emit('close');
   }
 }
+const boxEl = ref<HTMLElement | null>(null);
+useViewportFit(boxEl);
 onMounted(() => document.addEventListener('keydown', onKeydown, true));
 onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown, true));
 </script>
 
 <template>
   <Teleport :to="modalHost" :disabled="!modalHost">
-    <div class="bbi-empty-lb" @click="emit('close')">
+    <div ref="boxEl" class="bbi-empty-lb" @click="emit('close')">
       <div class="bbi-empty-lb__bar" @click.stop>
         <button class="bbi-empty-lb__close" type="button" title="关闭 (Esc)" @click="emit('close')">✕</button>
       </div>

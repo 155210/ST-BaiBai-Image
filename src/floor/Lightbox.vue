@@ -7,6 +7,7 @@ import { copyText } from '@/st/clipboard';
 import { modalHost } from '@/state/ui';
 import LightboxNavButtons from '@/lightboxNav/LightboxNav.vue'; // fork:左右切换
 import type { LightboxNav } from '@/lightboxNav/types';
+import { useViewportFit } from '@/viewportFit/fit'; // fork:贴合可视区
 
 /**
  * 图片灯箱(楼层卡片点击放大)。
@@ -47,6 +48,8 @@ const emit = defineEmits<{ close: []; delete: [] }>();
 
 /** 适应屏幕 ↔ 原始尺寸。 */
 const zoomed = ref(false);
+const lightboxEl = ref<HTMLElement | null>(null);
+useViewportFit(lightboxEl);
 
 /** 滚动容器(放大后平移用)。 */
 const stage = ref<HTMLElement | null>(null);
@@ -145,7 +148,7 @@ const promptText = computed(() => (props.prompt ?? '').trim());
        与 ConfirmDialog 同款手法。 -->
   <Teleport :to="modalHost" :disabled="!modalHost">
     <!-- 遮罩自身承接关闭点击;图片与操作栏 stop 掉,避免误关 -->
-    <div class="bbi-lightbox" @click="emit('close')">
+    <div ref="lightboxEl" class="bbi-lightbox" @click="emit('close')">
       <div class="bbi-lightbox__bar" @click.stop>
         <button class="bbi-lb-btn" type="button" title="保存图片" @click="save">
           <Icon name="download" :size="18" />

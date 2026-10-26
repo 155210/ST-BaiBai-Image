@@ -124,7 +124,8 @@ onBeforeUnmount(() => {
 }
 .bbi-lbnav-panel {
   position: fixed;
-  top: 20px;
+  /* 刘海/状态栏不挡住「删除这张图」 */
+  top: max(20px, calc(env(safe-area-inset-top) + 12px));
   left: 16px;
   z-index: 1;
   display: flex;
