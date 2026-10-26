@@ -16,6 +16,7 @@ import { pinFocusPosition, placeSlotTag, slotExtraUpdate } from '@/rewriteHint/m
 import { addFocusedTags, dropAddedMark, waitFloorIdle } from '@/rewriteHint/move';
 import { commitFocusSources, rememberFocusSources } from '@/rewriteHint/sources';
 import { manySlotTaskNote, normalizeSlotEdits, replaceManySlots, slotSeqs, type SlotEdit } from '@/rewriteHint/multiRewrite';
+import { withSlotPositions } from '@/rewriteHint/slotPosition';
 import {
   BBI_CHAR_EXTRA_KEY,
   CHAR_TAG_FIELDS,
@@ -345,7 +346,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
       memory,
       preparedTarget,
       anchors.text,
-      slot ? (slot.many ? manySlotTaskNote(rawSource, slot.many) : withRewriteHint(buildSlotTaskNote(rawSource, slot.seq), slot.hint)) : opts.focus ? passageTaskNote(opts.focus) : '',
+      slot ? withSlotPositions(slot.many ? manySlotTaskNote(rawSource, slot.many) : withRewriteHint(buildSlotTaskNote(rawSource, slot.seq), slot.hint), rawSource, slotSeqs(slot), settings.excludes.customStripTags) : opts.focus ? passageTaskNote(opts.focus) : '', // fork:报上图的位置
       profile,
     );
     const channel = getTagGenChannel();

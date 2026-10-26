@@ -70,6 +70,8 @@
 | src/autoTag/runner.ts | // fork:记下每张图按哪几段出的 | 同上：钉位置后先记段落原文 | 记段落 |
 | src/autoTag/runner.ts | // fork:段落记录随这次写回存盘 | 同上：写回时落到消息 extra | 记段落 |
 | src/autoTag/runner.ts | import { manySlotTaskNote, normalizeSlotEdits, replaceManySlots, slotSeqs, type SlotEdit } from '@/rewriteHint/multiRewrite'; | 引入「一起改几张」 | 一起改几张 |
+| src/autoTag/runner.ts | import { withSlotPositions } from '@/rewriteHint/slotPosition'; | 重写提示词时报上每张图的位置 | 重写报位置 |
+| src/autoTag/runner.ts | // fork:报上图的位置 | 同上：接在单张 / 一起改的任务备注后面 | 重写报位置 |
 | src/autoTag/runner.ts | /** fork:一起改几张 */ many?: SlotEdit[] | 同上：单槽选项带上几张各自的要求 | 一起改几张 |
 | src/autoTag/runner.ts | const focusCount = slot ? (slot.many?.length ?? 1) | 同上：协议恰好返回几张 | 一起改几张 |
 | src/autoTag/runner.ts | slot.many ? manySlotTaskNote(rawSource, slot.many) | 同上：任务备注 | 一起改几张 |
@@ -136,7 +138,7 @@
 - `src/lightboxNav/`、`src/batch/galleryLightbox.ts`、`src/pages/batch/EmptySlotView.vue`：图片浏览大图左右切换
 - `src/viewportFit/`：大图（聊天里的和图片浏览里的）按手机实际可见屏幕摆位置和高度，地址栏伸缩后底下不露黑屏、顶上按钮不被状态栏挡
 - `src/naiQuota/`：NAI 官方订阅额度与 Anlas 显示、每张费用估算、「只用免费额度」开关（批量遇到会直接暂停）
-- `src/rewriteHint/`：AI 重写提示词时可以写额外要求；「挑正文里的一段」点选本楼段落只画那几段；楼层「⋯」里有「挑一段生图」按钮（可一次挑几组段落、每组一张，只调一次 AI；已有图的楼是「再加图」，新图插到所选段落后、原来的图不动）；楼层「重新生成 tag」可以不指定段落并定最多几张，或指定段落几组几张；按段落出的图会记下是哪几段（消息 extra 的 bbiPassageSources），再加图时标在那几段上；有图的楼「⋯」里还有「一起改这层的图」，每张写修改要求、一次发给 AI 一起改
+- `src/rewriteHint/`：AI 重写提示词时可以写额外要求；「挑正文里的一段」点选本楼段落只画那几段；楼层「⋯」里有「挑一段生图」按钮（可一次挑几组段落、每组一张，只调一次 AI；已有图的楼是「再加图」，新图插到所选段落后、原来的图不动）；楼层「重新生成 tag」可以不指定段落并定最多几张，或指定段落几组几张；按段落出的图会记下是哪几段（消息 extra 的 bbiPassageSources），再加图时标在那几段上；有图的楼「⋯」里还有「一起改这层的图」，每张写修改要求、一次发给 AI 一起改；重写提示词时把每张图在正文里的位置一并报给 AI（slotPosition.ts），免得它自己推算
 - `src/autoTag/heavyPreset.ts`、`src/pages/settings/HeavyPresetPanel.vue`：解析失败时改用酒馆预设（重型自定义提示词）
 - `src/stream/`：副 API 流式实时输出、无响应超时
 - `src/streamSafe/`：酒馆正在流式出字时，写完 tag 的楼层更新通知先排队，输出完再补发
