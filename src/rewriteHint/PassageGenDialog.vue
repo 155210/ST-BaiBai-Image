@@ -29,15 +29,15 @@ const props = defineProps<{
   drawn?: Record<string, number[]>;
   /** 上次没写成时带回来的分组与要求 */
   initial?: { groups: string[][]; extra: string };
-  /** initial 是上次没写成带回来的,还是点「保存」存下的 */
+  /** initial 是上次没写成带回来的,还是上次选了没生成、自动存下的 */
   initialKind?: 'failed' | 'draft';
 }>();
 
 const emit = defineEmits<{
   (e: 'submit', groups: string[][], extra: string): void;
   (e: 'auto', count: number): void;
+  /** 选择一变就发:调用方存起来,下次打开接着选(全空 = 清掉存档) */
   (e: 'save', groups: string[][], extra: string): void;
-  (e: 'discard'): void;
   (e: 'close'): void;
 }>();
 
@@ -70,21 +70,19 @@ const labels = computed(() => {
 
 const filled = computed(() => groups.value.filter(group => group.length));
 
-/** 带回来的选择还在用(点了「清空重选」就不再提示) */
+/** 带回来的选择还在用(点了「清空」就不再提示) */
 const restored = ref(!!props.initial);
-const canSave = computed(() => filled.value.length > 0 || !!extra.value.trim());
+const canClear = computed(() => filled.value.length > 0 || !!extra.value.trim());
 
-function discard(): void {
+function clearAll(): void {
   groups.value = [[]];
   current.value = 0;
   extra.value = '';
   restored.value = false;
-  emit('discard');
 }
 
-function save(): void {
-  if (canSave.value) emit('save', groups.value.map(group => [...group]), extra.value);
-}
+// 选了就存,不用手动保存;关掉、切后台被杀都还在,生成或点「清空」才清掉
+watch([groups, extra], () => emit('save', groups.value.map(group => [...group]), extra.value), { deep: true });
 
 const strip = ref<HTMLElement | null>(null);
 
@@ -168,8 +166,7 @@ onBeforeUnmount(() => {
       </p>
       <p v-if="restored && initial && initialKind !== 'draft'" class="bbi-passage-gen__tip bbi-passage-gen__restored">上次没写成，已带上上次选的 {{ initial.groups.length }} 组段落和要求，可以直接再发。</p>
       <p v-if="restored && initialKind === 'draft'" class="bbi-passage-gen__tip bbi-passage-gen__restored">
-        接着上次保存的选（{{ filled.length }} 组段落），可以继续挑。
-        <button type="button" class="bbi-passage-gen__link" @click="discard">清空重选</button>
+        接着上次没生成的选（{{ filled.length }} 组段落），想重选点左下角「清空」。
       </p>
       <div ref="strip" class="bbi-passage-gen__groups" role="tablist">
         <button
@@ -217,11 +214,11 @@ onBeforeUnmount(() => {
           v-if="mode === 'pick'"
           class="bbi-btn"
           type="button"
-          :disabled="!canSave"
-          title="先存着，下次打开这一楼的挑段落接着选"
-          @click="save"
+          :disabled="!canClear"
+          title="清掉选好的段落和要求，重新选"
+          @click="clearAll"
         >
-          保存
+          清空
         </button>
         <span class="bbi-passage-gen__spacer"></span>
         <button class="bbi-btn" type="button" @click="emit('close')">取消</button>
@@ -319,16 +316,6 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-
-.bbi-passage-gen__link {
-  padding: 0;
-  border: none;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-decoration: underline;
-  cursor: pointer;
 }
 
 .bbi-passage-gen__spacer {
