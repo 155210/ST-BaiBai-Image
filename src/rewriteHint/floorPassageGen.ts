@@ -173,13 +173,12 @@ export function openPassageGenDialog(floor: number, handlers: DialogHandlers, ex
           close();
           if (hint) handlers.onSubmit(hint);
         },
+        // 选了就存;全清空了就删掉存档
         onSave: (groups: string[][], extra: string) => {
           if (closing) return;
-          saveDraft(key, draftFrom(regen, groups, extra, passages));
-          toastr.success('已保存，下次打开这一楼的挑段落会接着选', '柏宝绘');
-          close();
+          if (groups.some(group => group.length) || extra.trim()) saveDraft(key, draftFrom(regen, groups, extra, passages));
+          else clearDraft(key);
         },
-        onDiscard: () => clearDraft(key),
         onAuto: (count: number) => {
           if (closing) return;
           settled = true;
