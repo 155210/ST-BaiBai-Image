@@ -1,6 +1,6 @@
 import { h, render } from 'vue';
 
-import { cancelFloorTags, requestManySlotTags, type TagRunOutcome } from '@/autoTag/runner';
+import { requestManySlotTags } from '@/autoTag/runner';
 import { onChatMutation } from '@/floor/chatObserver';
 import { backendStatus } from '@/generate';
 import { getContext, isAiStoryMessage } from '@/st/context';
@@ -38,11 +38,7 @@ function setRunning(button: HTMLElement, running: boolean): void {
   button.classList.toggle('fa-spin', running);
 }
 
-/**
- * 弹窗在 AI 改写期间不关:跟单张「AI 重写提示词」一样显示实时输出,写好了自己关;
- * 失败或取消就留着,写过的要求还在,改一改能再发。关掉窗口不中断改写。
- */
-function openDialog(floor: number, items: SlotItem[], run: (edits: SlotEdit[]) => Promise<TagRunOutcome>): void {
+function openDialog(floor: number, items: SlotItem[], onSubmit: (edits: SlotEdit[]) => void): void {
   const root = document.getElementById(HOST_ID)?.shadowRoot;
   if (!root) return;
   closeCurrent?.();
@@ -50,7 +46,6 @@ function openDialog(floor: number, items: SlotItem[], run: (edits: SlotEdit[]) =
   root.appendChild(container);
   let closing = false;
   let closed = false;
-  let rewriting = false;
   const close = () => {
     if (closeCurrent !== close) return;
     closeCurrent = null;
@@ -71,20 +66,11 @@ function openDialog(floor: number, items: SlotItem[], run: (edits: SlotEdit[]) =
         items,
         configured: backendStatus().configured,
         closing,
-        rewriting,
         onClose: close,
-        onCancel: () => cancelFloorTags(floor),
         onSubmit: (edits: SlotEdit[]) => {
-          if (closing || rewriting) return;
-          rewriting = true;
-          paint();
-          void run(edits)
-            .catch(() => ({ kind: 'failed' }) as TagRunOutcome)
-            .then(outcome => {
-              rewriting = false;
-              if (outcome.kind === 'written') close();
-              else paint();
-            });
+          if (closing) return;
+          close();
+          onSubmit(edits);
         },
       }),
       container,
@@ -116,7 +102,7 @@ function onActivate(button: HTMLElement): void {
   }
   openDialog(floor, items, edits => {
     setRunning(button, true);
-    return requestManySlotTags(floor, edits).finally(() => setRunning(button, false));
+    void requestManySlotTags(floor, edits).finally(() => setRunning(button, false));
   });
 }
 
