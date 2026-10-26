@@ -5,6 +5,7 @@ import FloatingOrb from '@/components/FloatingOrb.vue';
 import { getPage } from '@/pages/registry';
 import { closePanel, cycleTheme, lastOpenedAt, modalHost, THEMES, ui } from '@/state/ui';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { useViewportFit } from '@/viewportFit/fit'; // fork:主面板贴合可视区
 
 // 题首主题按钮:显示「下一个」主题的图标与名,点击即切换到它
 const nextTheme = computed(() => {
@@ -41,6 +42,10 @@ function onOverlayClick(e: MouseEvent) {
   if (!justOpened && pressedOnOverlay && e.target === e.currentTarget) closePanel();
   pressedOnOverlay = false;
 }
+
+// fork:主面板贴合手机实际屏幕(ST 给 html 加了 transform,地址栏伸缩后 fixed 遮罩会错位、底下露空)
+const overlayEl = ref<HTMLElement | null>(null);
+useViewportFit(overlayEl);
 
 // —— 移动端:下滑关闭抽屉 ——
 const dragY = ref(0); // 当前下拉位移(px)
@@ -93,6 +98,7 @@ const windowStyle = computed(() => {
     <Transition name="bbi-fade">
       <div
         v-if="ui.open"
+        ref="overlayEl"
         class="bbi-overlay"
         @pointerdown="onOverlayPointerDown"
         @click="onOverlayClick"

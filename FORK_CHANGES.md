@@ -35,6 +35,9 @@
 | src/floor/Lightbox.vue | import { useViewportFit } from '@/viewportFit/fit'; | 大图贴合手机实际屏幕，底下不露黑、顶上不被挡 | 大图黑屏一截 |
 | src/floor/Lightbox.vue | useViewportFit(lightboxEl); | 同上 | 大图黑屏一截 |
 | src/floor/Lightbox.vue | ref="lightboxEl" class="bbi-lightbox" | 同上：给遮罩挂 ref | 大图黑屏一截 |
+| src/App.vue | import { useViewportFit } from '@/viewportFit/fit'; | 插件主面板也贴合手机实际屏幕，底下不露空 | 主面板底下空一截 |
+| src/App.vue | useViewportFit(overlayEl); | 同上 | 主面板底下空一截 |
+| src/App.vue | ref="overlayEl" | 同上：给遮罩挂 ref | 主面板底下空一截 |
 | src/floor/lightbox.ts | nav: options.nav, | 同上：传给灯箱 | 图片浏览左右切换 |
 | src/floor/lightbox.ts | export function closeLightbox | 切到没图的卡片时关掉灯箱 | 图片浏览左右切换 |
 | src/floor/Lightbox.vue | import ImageContextView from '@/imageContext/ImageContext.vue'; | 大图下面、提示词上面显示这张图前面的几段正文 | 大图对照正文 |
@@ -159,7 +162,7 @@
 - `src/charBust/`：角色库「胸部」一栏的旧数据迁移（体型里的胸部词挪过去）
 - `src/floorMenu/`：楼层「⋯」里柏宝绘的几个按钮收成一个 🎧，点开竖排菜单（原按钮照常注入，只是藏起来）
 - `src/imageContext/`：图片浏览的大图下面、提示词上面显示这张图前面的几段正文，方便对照图和文字
-- `src/viewportFit/`：大图（聊天里的和图片浏览里的）按手机实际可见屏幕摆位置和高度，地址栏伸缩后底下不露黑屏、顶上按钮不被状态栏挡
+- `src/viewportFit/`：插件主面板和大图（聊天里的和图片浏览里的）按手机实际可见屏幕摆位置和高度，地址栏伸缩后底下不露黑屏、顶上按钮不被状态栏挡
 - `src/naiQuota/`：NAI 官方订阅额度与 Anlas 显示、每张费用估算、「只用免费额度」开关（批量遇到会直接暂停）
 - `src/rewriteHint/`：AI 重写提示词时可以写额外要求；「挑正文里的一段」点选本楼段落只画那几段；楼层「⋯」里有「挑一段生图」按钮（可一次挑几组段落、每组一张，只调一次 AI；已有图的楼是「再加图」，新图插到所选段落后、原来的图不动）；楼层「重新生成 tag」可以不指定段落并定最多几张，或指定段落几组几张；按段落出的图会记下是哪几段（消息 extra 的 bbiPassageSources），再加图时标在那几段上；没写成时再打开会带上上次选的段落；有图的楼「⋯」里还有「一起改这层的图」，每张写修改要求、一次发给 AI 一起改；重写提示词时把每张图在正文里的位置一并报给 AI（slotPosition.ts），免得它自己推算
 - `src/autoTag/heavyPreset.ts`、`src/pages/settings/HeavyPresetPanel.vue`：解析失败时改用酒馆预设（重型自定义提示词），也可以设成一开始就直接用
