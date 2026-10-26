@@ -27,8 +27,6 @@ const emit = defineEmits<{
 }>();
 
 const open = ref(false);
-/** 一次最多分几组(几张) */
-const MAX_GROUPS = 6;
 const groups = ref<string[][]>([[]]);
 const current = ref(0);
 const extra = ref('');
@@ -53,7 +51,7 @@ const labels = computed(() => {
 const filled = computed(() => groups.value.filter(group => group.length));
 
 function addGroup(): void {
-  if (groups.value.length >= MAX_GROUPS || !picked.value.length) return;
+  if (!picked.value.length) return;
   groups.value = [...groups.value, []];
   current.value = groups.value.length - 1;
 }
@@ -119,7 +117,6 @@ onBeforeUnmount(() => {
           图{{ i + 1 }}{{ group.length ? `·${group.length}段` : '' }}
         </button>
         <button
-          v-if="groups.length < MAX_GROUPS"
           type="button"
           class="bbi-passage-gen__group bbi-passage-gen__group--add"
           :disabled="!picked.length"
