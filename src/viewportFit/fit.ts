@@ -1,4 +1,4 @@
-import { onBeforeUnmount, onMounted, type Ref } from 'vue';
+import { onBeforeUnmount, onMounted, watch, type Ref } from 'vue';
 
 /**
  * 全屏遮罩贴合真正看得见的屏幕(本 fork 新增)。
@@ -47,6 +47,10 @@ export function useViewportFit(target: Ref<HTMLElement | null | undefined>): voi
     });
   };
   const vv = window.visualViewport;
+  // 目标在 v-if 里(比如插件主面板):每次重新出现都贴一次
+  watch(target, el => {
+    if (el) schedule();
+  });
   onMounted(() => {
     schedule();
     window.addEventListener('resize', schedule);
