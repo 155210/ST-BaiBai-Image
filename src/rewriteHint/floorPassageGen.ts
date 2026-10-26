@@ -7,7 +7,10 @@ import { getContext, isAiStoryMessage } from '@/st/context';
 import { hasImageTagTrace, parseImageTags } from '@/st/imageTagRegex';
 import { isCurrentChatExcluded, settings } from '@/state/settings';
 
+import { BBI_IMAGE_EXTRA_KEY, type BbiImageStore } from '@/floor/storage';
+
 import { normalizeRewriteHint } from './hint';
+import { imageAnchors } from './move';
 import { floorPassages, passageGroupsHint } from './passage';
 import PassageGenDialog from './PassageGenDialog.vue';
 
@@ -38,6 +41,25 @@ function setRunning(button: HTMLElement, running: boolean): void {
   button.classList.toggle('fa-spin', running);
 }
 
+/** 段落 id → 紧跟在它后面的原有图(第几张 + 缩略图);楼头没有段落的记在空串下。 */
+export type ImageMarks = Record<string, Array<{ n: number; src?: string }>>;
+
+/** 「再加图」时标出本楼原来的图插在哪几段后面,带上每张最新出好的那次做缩略图。 */
+function existingImageMarks(floor: number): ImageMarks {
+  const message = getContext()?.chat?.[floor];
+  if (!message?.mes) return {};
+  const bucket = (message.extra?.[BBI_IMAGE_EXTRA_KEY] as BbiImageStore | undefined)?.[String(message.swipe_id ?? 0)] ?? {};
+  const entries = Object.values(bucket).flat();
+  const marks: ImageMarks = {};
+  for (const { passageId, seq } of imageAnchors(message.mes, settings.excludes.customStripTags)) {
+    const latest = entries
+      .filter(e => (e.slotSeq ?? 0) === seq && e.status === 'ready' && e.path)
+      .sort((a, b) => b.createdAt - a.createdAt)[0];
+    (marks[passageId] ??= []).push({ n: seq + 1, src: latest?.path });
+  }
+  return marks;
+}
+
 interface DialogHandlers {
   /** 挑好段落:hint 是拼好的「第 N 张图只画正文」要求 */
   onSubmit: (hint: string) => void;
@@ -53,6 +75,7 @@ export function openPassageGenDialog(floor: number, handlers: DialogHandlers, ex
   if (!root) return;
   closeCurrent?.();
   const passages = floorPassages(floor);
+  const marks = existing > 0 ? existingImageMarks(floor) : {};
   const container = document.createElement('div');
   root.appendChild(container);
   let closing = false;
@@ -84,6 +107,7 @@ export function openPassageGenDialog(floor: number, handlers: DialogHandlers, ex
         passages,
         existing,
         regenMax,
+        marks,
         configured: backendStatus().configured,
         closing,
         onClose: close,

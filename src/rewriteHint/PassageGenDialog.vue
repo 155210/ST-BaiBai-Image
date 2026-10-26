@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import BbiTextarea from '@/components/BbiTextarea.vue';
 import ModalMask from '@/components/ModalMask.vue';
 
 import { MAX_REWRITE_HINT } from './hint';
 import PassageList from './PassageList.vue';
+import type { ImageMarks } from './floorPassageGen';
 import type { Passage } from './passage';
 
 /**
@@ -22,6 +23,8 @@ const props = defineProps<{
   existing?: number;
   /** 给了就是已有 tag 的楼「重新生成」:多一个「不指定段落」模式,值是「最多几张」的初始值 */
   regenMax?: number;
+  /** 再加图时:原来的图插在哪几段后面 */
+  marks?: ImageMarks;
 }>();
 
 const emit = defineEmits<{
@@ -58,6 +61,13 @@ const labels = computed(() => {
 });
 
 const filled = computed(() => groups.value.filter(group => group.length));
+
+const strip = ref<HTMLElement | null>(null);
+
+// 图多了标签横向滚动:切到哪张就把那颗滚进视野
+watch(current, () =>
+  nextTick(() => strip.value?.querySelector('.is-current')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })),
+);
 
 function addGroup(): void {
   if (!picked.value.length) return;
@@ -130,9 +140,9 @@ onBeforeUnmount(() => {
       <template v-else>
       <p class="bbi-passage-gen__tip">
         点选要画的段落（可多选）就是一张图；想多出几张，点「＋ 再分一张」接着挑下一组。几张一起只问一次 AI，写完直接出图。
-        <template v-if="existing && !regen">本楼已有 {{ existing }} 张图，新图会放在各自段落后面，原来的图不动。</template>
+        <template v-if="existing && !regen">本楼已有 {{ existing }} 张图（列表里标了各插在哪段后面），新图会放在各自段落后面，原来的图不动。</template>
       </p>
-      <div class="bbi-passage-gen__groups" role="tablist">
+      <div ref="strip" class="bbi-passage-gen__groups" role="tablist">
         <button
           v-for="(group, i) in groups"
           :key="i"
@@ -145,6 +155,8 @@ onBeforeUnmount(() => {
         >
           图{{ i + 1 }}{{ group.length ? `·${group.length}段` : '' }}
         </button>
+      </div>
+      <div class="bbi-passage-gen__actions">
         <button
           type="button"
           class="bbi-passage-gen__group bbi-passage-gen__group--add"
@@ -158,7 +170,7 @@ onBeforeUnmount(() => {
           删掉图{{ current + 1 }}
         </button>
       </div>
-      <PassageList v-model="picked" :passages="passages" :labels="labels" />
+      <PassageList v-model="picked" class="bbi-passage-gen__list" :passages="passages" :labels="labels" :marks="marks" />
       <label class="bbi-passage-gen__extra">
         <span class="bbi-modal-label">另外的要求(可留空)</span>
         <BbiTextarea
@@ -196,10 +208,30 @@ onBeforeUnmount(() => {
   opacity: 0.8;
 }
 
+/* 图多了只占一行、横向滑动,别把下面的段落列表挤没 */
 .bbi-passage-gen__groups {
   display: flex;
-  flex-wrap: wrap;
+  flex-shrink: 0;
   gap: 6px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.bbi-passage-gen__groups .bbi-passage-gen__group {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.bbi-passage-gen__actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+/* 段落列表不跟着弹窗压缩:弹窗放不下时整体滚动 */
+.bbi-passage-gen__list {
+  flex-shrink: 0;
 }
 
 .bbi-passage-gen__group {
