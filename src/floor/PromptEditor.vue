@@ -8,6 +8,7 @@ import Icon from '@/components/Icon.vue';
 import ModalMask from '@/components/ModalMask.vue';
 import RewriteHintBox from '@/rewriteHint/RewriteHintBox.vue';
 import StreamView from '@/stream/StreamView.vue';
+import PromptOnlyEdit from '@/promptOnlyEdit/PromptOnlyEdit.vue'; // fork:只改提示词(不发正文)
 import { activeOrientationLock } from '@/state/settings';
 import { containsTagMarkup, type ImageTagContent } from '@/st/imageTagRegex';
 
@@ -177,6 +178,15 @@ watch(
   },
 );
 
+/** fork:「只改提示词」的结果填进输入框(不落盘,用户自己点应用)。 */
+function fillDraft(next: ImageTagContent): void {
+  tag.value = next.tag;
+  nl.value = next.nl;
+  negative.value = next.negative;
+  size.value = next.size;
+  characters.value = next.characters.map(character => ({ ...character }));
+}
+
 function addCharacter(): void {
   characters.value.push({ name: '', tag: '', nl: '' });
 }
@@ -278,6 +288,8 @@ onBeforeUnmount(() => {
           </button>
         </template>
       </div>
+      <!-- fork:只改提示词(不发正文),结果填进下面的输入框 -->
+      <PromptOnlyEdit v-if="!rewriting" :draft="draft" :hint="rewriteHint" :disabled="busy || !configured" @result="fillDraft" />
       <p v-if="rewriting" class="bbi-editor-note">
         重写完成后会直接保存并按新提示词出图，结果填回下面的输入框。
         现在关掉这个窗口也不会中断，回头再打开还能看到进度。
