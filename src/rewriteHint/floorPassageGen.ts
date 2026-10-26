@@ -11,6 +11,7 @@ import { BBI_IMAGE_EXTRA_KEY, type BbiImageStore } from '@/floor/storage';
 
 import { normalizeRewriteHint } from './hint';
 import { imageAnchors } from './move';
+import { drawnPassages } from './sources';
 import { floorPassages, passageGroupsHint } from './passage';
 import PassageGenDialog from './PassageGenDialog.vue';
 
@@ -76,6 +77,7 @@ export function openPassageGenDialog(floor: number, handlers: DialogHandlers, ex
   closeCurrent?.();
   const passages = floorPassages(floor);
   const marks = existing > 0 ? existingImageMarks(floor) : {};
+  const drawn = existing > 0 ? drawnPassages(floor) : {};
   const container = document.createElement('div');
   root.appendChild(container);
   let closing = false;
@@ -108,6 +110,7 @@ export function openPassageGenDialog(floor: number, handlers: DialogHandlers, ex
         existing,
         regenMax,
         marks,
+        drawn,
         configured: backendStatus().configured,
         closing,
         onClose: close,
