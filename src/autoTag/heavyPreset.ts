@@ -33,6 +33,8 @@ export interface HeavyEntry {
 export interface HeavyPresetSettings {
   /** 解析失败时是否改用重型提示词重试。 */
   enabled: boolean;
+  /** 开着时第一次就直接用重型提示词,不先跑默认提示词。 */
+  alwaysUse: boolean;
   /** 导入时的预设名(仅展示)。 */
   name: string;
   /** 条目列表,顺序即相对条目的拼装顺序;总含且只含一个占位条目。 */
@@ -60,7 +62,7 @@ export function heavySlotEntry(): HeavyEntry {
 }
 
 export function heavyPresetDefaults(): HeavyPresetSettings {
-  return { enabled: true, name: '', entries: [heavySlotEntry()], squash: false, extras: [] };
+  return { enabled: true, alwaysUse: false, name: '', entries: [heavySlotEntry()], squash: false, extras: [] };
 }
 
 function normalizeRole(value: unknown): HeavyRole {
@@ -110,11 +112,17 @@ export function normalizeHeavyPreset(raw: unknown): HeavyPresetSettings {
   if (!seen.has(HEAVY_SLOT_ID)) entries.push(heavySlotEntry());
   return {
     enabled: typeof r.enabled === 'boolean' ? r.enabled : d.enabled,
+    alwaysUse: typeof r.alwaysUse === 'boolean' ? r.alwaysUse : d.alwaysUse,
     name: typeof r.name === 'string' ? r.name : d.name,
     entries,
     squash: typeof r.squash === 'boolean' ? r.squash : d.squash,
     extras: take(r.extras, false),
   };
+}
+
+/** 第一次请求就用重型提示词:开了「直接用」且确实有可用的重型提示词。 */
+export function heavyFirst(preset: HeavyPresetSettings | undefined | null): boolean {
+  return !!preset?.alwaysUse && heavyPresetUsable(preset);
 }
 
 /** 是否有可用的重型提示词:开关开着,且除占位外至少有一条启用、非空的条目。 */

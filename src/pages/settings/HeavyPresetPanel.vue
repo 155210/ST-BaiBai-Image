@@ -56,6 +56,7 @@ async function onImport(event: Event): Promise<void> {
     const parsed = parseSTPreset(JSON.parse(await file.text()));
     settings.autoTag.heavyPreset = {
       enabled: preset.value.enabled,
+      alwaysUse: preset.value.alwaysUse,
       name: file.name.replace(/\.json$/i, ''),
       entries: parsed.entries,
       squash: parsed.squash,
@@ -82,7 +83,7 @@ async function clearPreset(): Promise<void> {
     tone: 'danger',
   });
   if (!ok) return;
-  settings.autoTag.heavyPreset = { ...heavyPresetDefaults(), enabled: preset.value.enabled };
+  settings.autoTag.heavyPreset = { ...heavyPresetDefaults(), enabled: preset.value.enabled, alwaysUse: preset.value.alwaysUse };
   exitSelect();
 }
 
@@ -236,7 +237,15 @@ function addEntry(): void {
     每楼先用「自定义提示词」请求;返回解析失败后,剩下的自动重试改用这里导入的酒馆预设,下一楼重新从默认开始。
     条目按各自的身份、位置(相对 / 聊天中深度)和顺序拼装,「柏宝绘提示词」条目就是默认提示词整条,
     相当于预设里聊天记录的位置。
-    <strong v-if="settings.autoTag.retryCount === 0">当前失败自动重试次数为 0,只会用默认提示词。</strong>
+    <strong v-if="settings.autoTag.retryCount === 0 && !preset.alwaysUse">当前失败自动重试次数为 0,只会用默认提示词。</strong>
+  </p>
+  <label v-if="preset.enabled" class="bbi-switch-row">
+    <span class="bbi-field-label">直接用重型提示词</span>
+    <input v-model="settings.autoTag.heavyPreset.alwaysUse" type="checkbox" class="bbi-checkbox" />
+  </label>
+  <p v-if="preset.enabled" class="bbi-field-hint">
+    打开后每次一开始就用这里导入的预设,不先跑默认提示词(生成 tag、挑段落、重新生成、重写提示词都算)。
+    <strong v-if="preset.alwaysUse && !promptCount">还没导入预设,目前仍用默认提示词。</strong>
   </p>
 
   <div class="bbi-heavy-bar">

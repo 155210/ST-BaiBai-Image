@@ -31,7 +31,7 @@ import {
   type CharTagAutoOp,
   type CharTagField,
 } from '@/state/charTags';
-import { assembleHeavyMessages, heavyPresetUsable } from '@/autoTag/heavyPreset';
+import { assembleHeavyMessages, heavyFirst, heavyPresetUsable } from '@/autoTag/heavyPreset';
 import { injectImageTags, parseImagePlan, type ImagePlan } from '@/autoTag/protocol';
 import {
   clearAutoGenerateForFloor,
@@ -367,7 +367,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
           settings.autoTag.heavyPreset.squash,
         )
       : null;
-    let useHeavy = false;
+    let useHeavy = heavyFirst(settings.autoTag.heavyPreset); // fork:直接用重型预设
     for (let attempt = 0; attempt <= retries && !plan; attempt++) {
       if (controller.signal.aborted) {
         processed.delete(identity);
