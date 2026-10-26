@@ -1,5 +1,6 @@
 import { getContext, type STMessage } from '@/st/context';
 import { reactive } from 'vue';
+import { splitBust, withSplitBust } from '@/charBust/split'; // fork:罩杯
 
 /**
  * 角色固定外貌库。
@@ -202,7 +203,7 @@ function normalizeFields(raw: unknown): Record<CharTagField, string> {
     const value = (raw as Record<string, unknown>)[field];
     if (typeof value === 'string') fields[field] = value.trim();
   }
-  return fields;
+  return splitBust(fields); // fork:体型里的胸部词挪到胸部
 }
 
 function normalizeEntry(raw: unknown): CharTagEntry | null {
@@ -405,7 +406,7 @@ export function deriveCharTags(
     if (!delta || delta.swipe !== activeSwipe(message)) continue;
     entries = applyCharTagOps(entries, delta.ops, floor, locked);
   }
-  return entries;
+  return entries.map(withSplitBust); // fork:体型里的胸部词挪到胸部
 }
 
 export function charTagsBeforeFloor(floor: number): CharTagEntry[] {

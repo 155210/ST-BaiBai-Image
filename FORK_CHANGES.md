@@ -52,6 +52,10 @@
 | src/autoTag/charAnchors.ts | - bust(胸部,女性才填) | 同上：中文外貌转字段时拆出胸部 | 角色库罩杯 |
 | src/autoTag/charAnchors.ts | "bust":"..." | 同上 | 角色库罩杯 |
 | src/pages/characters/index.vue | bust: '女性填: flat chest | 同上：输入框提示 | 角色库罩杯 |
+| src/state/charTags.ts | import { splitBust, withSplitBust } from '@/charBust/split'; | 旧角色「体型」里的胸部词读出来时挪到「胸部」 | 角色库罩杯 |
+| src/state/charTags.ts | return splitBust(fields); | 同上：读库时 | 角色库罩杯 |
+| src/state/charTags.ts | return entries.map(withSplitBust); | 同上：AI 改过体型之后 | 角色库罩杯 |
+| src/autoTag/prompt.ts | 库中没标 [locked] 的女性角色「胸部」一栏为空时 | 同上：胸部还空着的旧角色让 AI 出场时补上 | 角色库罩杯 |
 | src/floor/PromptEditor.vue | import RewriteHintBox from '@/rewriteHint/RewriteHintBox.vue'; | 引入重写要求输入框 | #6 |
 | src/floor/PromptEditor.vue | const rewriteHint = ref(''); | 重写要求的状态 | #6 |
 | src/floor/PromptEditor.vue | <RewriteHintBox v-model="rewriteHint" | 「AI 重写提示词」按钮上方的输入框 | #6 |
@@ -152,6 +156,7 @@
 - `src/floor/slotGenerate.ts`：单张出图（卡片与批量共用）
 - `src/state/backup.ts`、`src/pages/settings/BackupSection.vue`：导出 / 导入设置
 - `src/lightboxNav/`、`src/batch/galleryLightbox.ts`、`src/pages/batch/EmptySlotView.vue`：图片浏览大图左右切换
+- `src/charBust/`：角色库「胸部」一栏的旧数据迁移（体型里的胸部词挪过去）
 - `src/floorMenu/`：楼层「⋯」里柏宝绘的几个按钮收成一个 🎧，点开竖排菜单（原按钮照常注入，只是藏起来）
 - `src/imageContext/`：图片浏览的大图下面、提示词上面显示这张图前面的几段正文，方便对照图和文字
 - `src/viewportFit/`：大图（聊天里的和图片浏览里的）按手机实际可见屏幕摆位置和高度，地址栏伸缩后底下不露黑屏、顶上按钮不被状态栏挡
