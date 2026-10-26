@@ -32,6 +32,9 @@
 | src/floor/Lightbox.vue | import LightboxNavButtons from '@/lightboxNav/LightboxNav.vue'; | 灯箱左右切换箭头 | 图片浏览左右切换 |
 | src/floor/Lightbox.vue | nav?: LightboxNav; | 同上：灯箱接收切换回调 | 图片浏览左右切换 |
 | src/floor/Lightbox.vue | <LightboxNavButtons v-if="nav" :nav="nav" /> | 同上：放箭头 | 图片浏览左右切换 |
+| src/floor/Lightbox.vue | import { useViewportFit } from '@/viewportFit/fit'; | 大图贴合手机实际屏幕，底下不露黑、顶上不被挡 | 大图黑屏一截 |
+| src/floor/Lightbox.vue | useViewportFit(lightboxEl); | 同上 | 大图黑屏一截 |
+| src/floor/Lightbox.vue | ref="lightboxEl" class="bbi-lightbox" | 同上：给遮罩挂 ref | 大图黑屏一截 |
 | src/floor/lightbox.ts | nav: options.nav, | 同上：传给灯箱 | 图片浏览左右切换 |
 | src/floor/lightbox.ts | export function closeLightbox | 切到没图的卡片时关掉灯箱 | 图片浏览左右切换 |
 | src/floor/PromptEditor.vue | import RewriteHintBox from '@/rewriteHint/RewriteHintBox.vue'; | 引入重写要求输入框 | #6 |
@@ -131,6 +134,7 @@
 - `src/floor/slotGenerate.ts`：单张出图（卡片与批量共用）
 - `src/state/backup.ts`、`src/pages/settings/BackupSection.vue`：导出 / 导入设置
 - `src/lightboxNav/`、`src/batch/galleryLightbox.ts`、`src/pages/batch/EmptySlotView.vue`：图片浏览大图左右切换
+- `src/viewportFit/`：大图（聊天里的和图片浏览里的）按手机实际可见屏幕摆位置和高度，地址栏伸缩后底下不露黑屏、顶上按钮不被状态栏挡
 - `src/naiQuota/`：NAI 官方订阅额度与 Anlas 显示、每张费用估算、「只用免费额度」开关（批量遇到会直接暂停）
 - `src/rewriteHint/`：AI 重写提示词时可以写额外要求；「挑正文里的一段」点选本楼段落只画那几段；楼层「⋯」里有「挑一段生图」按钮（可一次挑几组段落、每组一张，只调一次 AI；已有图的楼是「再加图」，新图插到所选段落后、原来的图不动）；楼层「重新生成 tag」可以不指定段落并定最多几张，或指定段落几组几张；按段落出的图会记下是哪几段（消息 extra 的 bbiPassageSources），再加图时标在那几段上；有图的楼「⋯」里还有「一起改这层的图」，每张写修改要求、一次发给 AI 一起改
 - `src/autoTag/heavyPreset.ts`、`src/pages/settings/HeavyPresetPanel.vue`：解析失败时改用酒馆预设（重型自定义提示词）
