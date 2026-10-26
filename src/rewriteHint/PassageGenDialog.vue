@@ -27,6 +27,8 @@ const props = defineProps<{
   marks?: ImageMarks;
   /** 再加图时:哪几段出过第几张 */
   drawn?: Record<string, number[]>;
+  /** 上次没写成时带回来的分组与要求 */
+  initial?: { groups: string[][]; extra: string };
 }>();
 
 const emit = defineEmits<{
@@ -38,12 +40,12 @@ const emit = defineEmits<{
 const open = ref(false);
 const regen = computed(() => props.regenMax !== undefined);
 /** 重新生成默认不指定段落(和原来点「重新生成」一样由 AI 挑) */
-const mode = ref<'auto' | 'pick'>(props.regenMax !== undefined ? 'auto' : 'pick');
+const mode = ref<'auto' | 'pick'>(props.regenMax !== undefined && !props.initial ? 'auto' : 'pick');
 const count = ref(Math.max(1, Math.floor(props.regenMax ?? 1)));
 const countValid = computed(() => Number.isInteger(count.value) && count.value >= 1);
-const groups = ref<string[][]>([[]]);
+const groups = ref<string[][]>(props.initial ? props.initial.groups.map(g => [...g]) : [[]]);
 const current = ref(0);
-const extra = ref('');
+const extra = ref(props.initial?.extra ?? '');
 
 /** 当前这组选中的段落;改选时从别的组里拿走同一段(一段只归一张) */
 const picked = computed({
@@ -144,6 +146,7 @@ onBeforeUnmount(() => {
         点选要画的段落（可多选）就是一张图；想多出几张，点「＋ 再分一张」接着挑下一组。几张一起只问一次 AI，写完直接出图。
         <template v-if="existing && !regen">本楼已有 {{ existing }} 张图（列表里标了各插在哪段后面；按段落出的会在那几段上标「出过第 N 张」），新图会放在各自段落后面，原来的图不动。</template>
       </p>
+      <p v-if="initial" class="bbi-passage-gen__tip bbi-passage-gen__restored">上次没写成，已带上上次选的 {{ initial.groups.length }} 组段落和要求，可以直接再发。</p>
       <div ref="strip" class="bbi-passage-gen__groups" role="tablist">
         <button
           v-for="(group, i) in groups"
@@ -204,6 +207,10 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.bbi-passage-gen__restored {
+  color: var(--bbi-accent, inherit);
+}
+
 .bbi-passage-gen__tip {
   margin: 0;
   font-size: 12.5px;
