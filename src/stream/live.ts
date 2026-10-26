@@ -6,10 +6,14 @@ import { reactive } from 'vue';
  * 省性能的做法:
  * - 收到的片段只拼进一个普通字符串(不是响应式),没人看时不触发任何渲染;
  * - 只有展开的「实时输出」面板在看时(watchers > 0),才每 0.5 秒把文本抄一份到响应式的 view;
- * - 文本只留最后 MAX_CHARS 个字,长输出不会越攒越大。
+ * - 面板只显示最后 VIEW_CHARS 个字(手机上不必每次重排几十万字);完整文本留着给「复制」,
+ *   超过 MAX_KEEP 才从前面截掉,防极端情况把内存撑爆。
  */
 
-const MAX_CHARS = 20000;
+const VIEW_CHARS = 20000;
+const MAX_KEEP = 1_000_000;
+/** 楼层折叠区:每楼最近一条(写完也留着,下次同一楼开始写才换掉),最多记这么多楼。 */
+const MAX_FLOORS = 30;
 export const REFRESH_MS = 500;
 
 export interface Live {
@@ -38,6 +42,7 @@ let current: Live | null = null;
 /** 还在接收中的请求。楼层折叠区按它挂、按它撤。 */
 const active = new Map<number, Live>();
 const changeListeners = new Set<() => void>();
+const byFloor = new Map<string, Live>();
 
 function notifyChange(): void {
   for (const listener of changeListeners) {
@@ -60,6 +65,16 @@ export function activeStreams(): Live[] {
   return [...active.values()];
 }
 
+/** 每楼最近一条(含已结束的),楼层折叠区按它挂:写完不撤,同一楼下次开始写才换成新的。 */
+export function floorStreams(): Live[] {
+  return [...byFloor.values()];
+}
+
+/** 当前这条的完整文本(「复制」用)。 */
+export function currentFullText(): string {
+  return current?.text ?? '';
+}
+
 /** 只留结尾 max 个字,前面省略的部分用一行提示代替。 */
 export function tailText(live: Pick<Live, 'text' | 'total'>, max: number): string {
   const text = live.text.length > max ? live.text.slice(-max) : live.text;
@@ -72,6 +87,8 @@ let timer: ReturnType<typeof setInterval> | null = null;
 
 /** 面板展示用。只在有人展开面板时更新。 */
 export const streamView = reactive({
+  /** 当前这条的编号:换了新请求面板就重新跟随。 */
+  id: 0,
   source: '',
   text: '',
   running: false,
@@ -83,6 +100,7 @@ export const streamView = reactive({
 function flush(): void {
   if (!dirty) return;
   dirty = false;
+  streamView.id = current?.id ?? 0;
   streamView.source = current?.source ?? '';
   streamView.text = liveText();
   streamView.running = !!current && !current.done;
@@ -111,6 +129,12 @@ export function beginStream(source: string, meta: StreamMeta = {}): StreamTap {
   current = live;
   dirty = true;
   active.set(live.id, live);
+  if (live.floor !== undefined) {
+    const key = `${live.chatId}\u0000${live.floor}`;
+    byFloor.delete(key);
+    byFloor.set(key, live);
+    while (byFloor.size > MAX_FLOORS) byFloor.delete(byFloor.keys().next().value as string);
+  }
   notifyChange();
   return {
     push(piece) {
@@ -118,7 +142,7 @@ export function beginStream(source: string, meta: StreamMeta = {}): StreamTap {
       live.text += piece;
       live.total += piece.length;
       live.lastAt = Date.now();
-      if (live.text.length > MAX_CHARS * 2) live.text = live.text.slice(-MAX_CHARS);
+      if (live.text.length > MAX_KEEP * 1.2) live.text = live.text.slice(-MAX_KEEP);
       if (current === live) dirty = true;
     },
     end(error = '') {
@@ -151,10 +175,9 @@ export function watchStream(): () => void {
   };
 }
 
-/** 只读当前文本(测试用)。 */
+/** 面板显示的文本:只留结尾 VIEW_CHARS 个字。 */
 export function liveText(): string {
-  const text = current?.text ?? '';
-  return text.length > MAX_CHARS ? text.slice(-MAX_CHARS) : text;
+  return current ? tailText(current, VIEW_CHARS) : '';
 }
 
 export function isWatched(): boolean {

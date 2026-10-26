@@ -1,11 +1,15 @@
 import { onChatMutation } from '@/floor/chatObserver';
 import { getContext } from '@/st/context';
-import { activeStreams, onStreamsChange, REFRESH_MS, tailText, type Live } from './live';
+import { copyText } from '@/st/clipboard';
+
+import { floorStreams, onStreamsChange, REFRESH_MS, tailText, type Live } from './live';
 import { readOpenPref, writeOpenPref } from './openPref';
 
 /**
  * (本 fork 新增)楼层上的「实时输出」折叠区:副 API 开了流式时,正在写生图 tag 的那一楼
- * 正文下面出现一条「柏宝绘正在写生图 tag」,点开能看 AI 正在写什么。写完(或失败)就撤掉。
+ * 正文下面出现一条「柏宝绘正在写生图 tag」,点开能看 AI 正在写什么。写完(或失败)不撤,
+ * 留着给人回看、复制,同一楼下次开始写才换成新的(只在内存里,刷新页面就没了)。
+ * 往上翻看时文字定住不动,滑回底部再接着跟。
  *
  * 手机性能:
  * - 收起时只有一行静态标题,不跑定时器、不碰 DOM;新内容只拼进 live.ts 的字符串;
@@ -28,20 +32,26 @@ interface Panel {
   live: Live;
   el: HTMLElement;
   meta: HTMLElement;
+  title: HTMLElement;
   toggle: HTMLElement;
+  tools: HTMLElement;
+  resume: HTMLElement;
   pre: HTMLElement;
   text: Text;
   open: boolean;
   timer: ReturnType<typeof setInterval> | null;
   /** 上次画到界面上的累计字数,没变就不重写文本。 */
   shownTotal: number;
+  /** 在底部跟着最新内容走;往上翻了就定住。 */
+  follow: boolean;
 }
 
 const panels = new Map<number, Panel>();
 let bound = false;
 
 /** 展开时标题右侧的状态行。纯函数,便于测试。 */
-export function panelMeta(live: Pick<Live, 'total' | 'lastAt'>, now: number): string {
+export function panelMeta(live: Pick<Live, 'total' | 'lastAt'> & { done?: boolean; error?: string }, now: number): string {
+  if (live.done) return live.error ? `${live.error} · 共 ${live.total} 字` : `已结束 · 共 ${live.total} 字`;
   const quiet = Math.max(0, Math.floor((now - live.lastAt) / 1000));
   if (!live.total) return `等待第一段内容… ${quiet} 秒`;
   return `已收到 ${live.total} 字${quiet >= 3 ? ` · ${quiet} 秒没有新内容` : ''}`;
@@ -57,21 +67,42 @@ function ensureStyle(): void {
 .${PANEL_CLASS} .bbi-live-title{flex:1 1 auto;min-width:0;opacity:.85}
 .${PANEL_CLASS} .bbi-live-meta{flex:0 1 auto;opacity:.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .${PANEL_CLASS} .bbi-live-toggle{flex:0 0 auto;opacity:.6}
+.${PANEL_CLASS} .bbi-live-tools{display:flex;gap:8px;justify-content:flex-end;padding:0 10px 8px}
+.${PANEL_CLASS} .bbi-live-tools button{padding:2px 10px;border:1px solid var(--SmartThemeBorderColor,rgba(128,128,128,.4));border-radius:6px;background:transparent;color:inherit;font:inherit;cursor:pointer}
 .${PANEL_CLASS} pre{margin:0;padding:6px 10px 8px;max-height:220px;overflow-y:auto;-webkit-overflow-scrolling:touch;white-space:pre-wrap;word-break:break-all;font-family:var(--monoFontFamily,monospace);font-size:11px;opacity:.85;border-top:1px solid var(--SmartThemeBorderColor,rgba(128,128,128,.25))}
 `;
   document.head.appendChild(style);
 }
 
+function titleOf(live: Live): string {
+  return live.done ? '柏宝绘上次写的生图 tag' : '柏宝绘正在写生图 tag';
+}
+
 function render(panel: Panel): void {
   const { live } = panel;
   panel.meta.textContent = panelMeta(live, Date.now());
-  if (live.total === panel.shownTotal) return;
+  const title = titleOf(live);
+  if (panel.title.textContent !== title) panel.title.textContent = title;
+  panel.resume.hidden = panel.follow;
+  // 写完且已画到最后:停掉刷新定时器
+  if (live.done && live.total === panel.shownTotal && panel.timer) {
+    clearInterval(panel.timer);
+    panel.timer = null;
+  }
+  // 收起时不碰文字;往上翻着看时也不动,不然开头被截掉、看的地方会一直往上跑
+  if (!panel.open || live.total === panel.shownTotal || !panel.follow) return;
   panel.shownTotal = live.total;
-  const pre = panel.pre;
-  // 用户没往上翻时跟着最新内容走
-  const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 40;
   panel.text.data = tailText(live, MAX_SHOWN);
-  if (atBottom) pre.scrollTop = pre.scrollHeight;
+  panel.pre.scrollTop = panel.pre.scrollHeight;
+}
+
+function onPanelScroll(panel: Panel): void {
+  const pre = panel.pre;
+  const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 40;
+  if (atBottom === panel.follow) return;
+  panel.follow = atBottom;
+  panel.resume.hidden = atBottom;
+  if (atBottom) render(panel);
 }
 
 function setOpen(panel: Panel, open: boolean): void {
@@ -79,11 +110,13 @@ function setOpen(panel: Panel, open: boolean): void {
   panel.el.querySelector('button')?.setAttribute('aria-expanded', open ? 'true' : 'false');
   panel.toggle.textContent = open ? '收起' : '展开';
   panel.pre.hidden = !open;
+  panel.tools.hidden = !open;
   panel.meta.hidden = !open;
   if (open) {
     panel.shownTotal = -1;
+    panel.follow = true;
     render(panel);
-    if (!panel.timer) panel.timer = setInterval(() => render(panel), REFRESH_MS);
+    if (!panel.timer && !panel.live.done) panel.timer = setInterval(() => render(panel), REFRESH_MS);
   } else if (panel.timer) {
     clearInterval(panel.timer);
     panel.timer = null;
@@ -102,7 +135,7 @@ function createPanel(floor: number, live: Live): Panel {
   icon.className = 'fa-solid fa-feather-pointed';
   const title = document.createElement('span');
   title.className = 'bbi-live-title';
-  title.textContent = '柏宝绘正在写生图 tag';
+  title.textContent = titleOf(live);
   const meta = document.createElement('span');
   meta.className = 'bbi-live-meta';
   const toggle = document.createElement('span');
@@ -112,9 +145,30 @@ function createPanel(floor: number, live: Live): Panel {
   const pre = document.createElement('pre');
   const text = document.createTextNode('');
   pre.appendChild(text);
-  el.append(head, pre);
+  const tools = document.createElement('div');
+  tools.className = 'bbi-live-tools';
+  const resume = document.createElement('button');
+  resume.type = 'button';
+  resume.textContent = '停在这里了，回到最新';
+  resume.hidden = true;
+  const copy = document.createElement('button');
+  copy.type = 'button';
+  copy.textContent = '复制全部';
+  tools.append(resume, copy);
+  el.append(head, pre, tools);
 
-  const panel: Panel = { floor, live, el, meta, toggle, pre, text, open: false, timer: null, shownTotal: -1 };
+  const panel: Panel = { floor, live, el, meta, title, toggle, tools, resume, pre, text, open: false, timer: null, shownTotal: -1, follow: true };
+  pre.addEventListener('scroll', () => onPanelScroll(panel), { passive: true });
+  resume.addEventListener('click', event => {
+    event.stopPropagation();
+    panel.follow = true;
+    panel.shownTotal = -1;
+    render(panel);
+  });
+  copy.addEventListener('click', event => {
+    event.stopPropagation();
+    void copyText(panel.live.text, '实时输出已复制');
+  });
   head.addEventListener('click', event => {
     // 别让点击冒泡到 ST 的楼层点击逻辑(选择/删除模式等)
     event.stopPropagation();
@@ -138,7 +192,7 @@ function reconcile(): void {
   const chatId = getContext()?.getCurrentChatId?.() ?? '';
   // 同一楼有多条(重试/重写叠在一起)时显示最新开始的那条
   const wanted = new Map<number, Live>();
-  for (const live of activeStreams()) {
+  for (const live of floorStreams()) {
     if (live.floor === undefined || !chatId || live.chatId !== chatId) continue;
     wanted.set(live.floor, live);
   }
@@ -153,8 +207,11 @@ function reconcile(): void {
     if (panel.live !== live) {
       panel.live = live;
       panel.shownTotal = -1;
-      if (panel.open) render(panel);
+      panel.follow = true;
+      if (panel.open && !panel.timer) panel.timer = setInterval(() => render(panel), REFRESH_MS);
     }
+    // 开始 / 结束都走到这里:更新标题、状态,写完的最后一段也画上
+    render(panel);
   }
 
   for (const [floor, live] of wanted) {
@@ -174,8 +231,8 @@ export function bindFloorStreamPanels(): void {
   bound = true;
   onStreamsChange(reconcile);
   onChatMutation(() => {
-    // 没有在途请求也没挂着的折叠区:什么都不用做(这是绝大多数时候)
-    if (!panels.size && !activeStreams().length) return;
+    // 没写过 tag 也没挂着的折叠区:什么都不用做(这是绝大多数时候)
+    if (!panels.size && !floorStreams().length) return;
     reconcile();
   });
 }

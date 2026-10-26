@@ -54,13 +54,27 @@ describe('实时输出:收起不刷新,展开节流刷新', () => {
     release();
   });
 
-  it('超长输出只保留结尾', () => {
+  it('超长输出面板只显示结尾,复制拿得到全文', async () => {
+    const { currentFullText } = await import('./live');
     const release = watchStream();
     const tap = beginStream('长');
-    for (let i = 0; i < 100; i++) tap.push('x'.repeat(1000));
+    for (let i = 0; i < 100; i++) tap.push(`${i}`.padEnd(1000, 'x'));
     tap.end();
-    expect(streamView.text.length).toBeLessThanOrEqual(20000);
+    expect(streamView.text.startsWith('…（前面还有 80000 字）')).toBe(true);
+    expect(streamView.text.length).toBeLessThan(20100);
+    expect(currentFullText().length).toBe(100000);
+    expect(currentFullText().startsWith('0xx')).toBe(true);
     release();
+  });
+
+  it('楼层最近一条写完也留着,同一楼再写才换', async () => {
+    const { floorStreams } = await import('./live');
+    const a = beginStream('第 7 楼', { chatId: 'k', floor: 7 });
+    a.end();
+    expect(floorStreams().filter(l => l.chatId === 'k' && l.floor === 7).map(l => l.source)).toEqual(['第 7 楼']);
+    const b = beginStream('第 7 楼 · 第 2 次', { chatId: 'k', floor: 7 });
+    expect(floorStreams().filter(l => l.chatId === 'k' && l.floor === 7).map(l => l.source)).toEqual(['第 7 楼 · 第 2 次']);
+    b.end();
   });
 });
 

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { nextTick, onUnmounted, ref, watch } from 'vue';
 
-import { streamView, watchStream } from './live';
+import { copyText } from '@/st/clipboard';
+
+import { currentFullText, streamView, watchStream } from './live';
 import { readOpenPref, writeOpenPref } from './openPref';
 
 /**
@@ -26,17 +28,56 @@ watch(
   { immediate: true },
 );
 
-// 贴底:用户没往上翻时跟着最新内容走
+// 跟随:在底部时跟着最新内容走;往上翻了就把显示的文字定住(不然新内容一来、开头被截掉,
+// 正在看的地方会一直往上跑),滑回底部再接着跟。
+const follow = ref(true);
+const shown = ref(streamView.text);
+
+function atBottom(el: HTMLElement): boolean {
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+}
+
+async function stickToBottom(): Promise<void> {
+  await nextTick();
+  if (box.value && follow.value) box.value.scrollTop = box.value.scrollHeight;
+}
+
 watch(
-  () => streamView.text,
-  async () => {
-    const el = box.value;
-    if (!el) return;
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-    await nextTick();
-    if (atBottom) el.scrollTop = el.scrollHeight;
+  () => [streamView.id, streamView.text] as const,
+  ([id, text], [prevId]) => {
+    // 换了一条新请求:不管翻到哪,都换成新的
+    if (id !== prevId) follow.value = true;
+    if (!follow.value) return;
+    shown.value = text;
+    void stickToBottom();
   },
 );
+
+function onScroll(): void {
+  const el = box.value;
+  if (!el) return;
+  const bottom = atBottom(el);
+  if (bottom === follow.value) return;
+  follow.value = bottom;
+  if (bottom && shown.value !== streamView.text) {
+    shown.value = streamView.text;
+    void stickToBottom();
+  }
+}
+
+watch(open, value => {
+  if (value) resume();
+});
+
+function resume(): void {
+  follow.value = true;
+  shown.value = streamView.text;
+  void stickToBottom();
+}
+
+async function copyAll(): Promise<void> {
+  await copyText(currentFullText(), '实时输出已复制');
+}
 
 onUnmounted(() => {
   release?.();
@@ -60,7 +101,12 @@ onUnmounted(() => {
           <template v-else-if="streamView.error"> · {{ streamView.error }}</template>
           <template v-else> · 已结束</template>
         </p>
-        <pre ref="box" class="bbi-stream-text">{{ streamView.text || '（等待第一段内容…）' }}</pre>
+        <pre ref="box" class="bbi-stream-text" @scroll.passive="onScroll">{{ shown || '（等待第一段内容…）' }}</pre>
+        <div class="bbi-stream-tools">
+          <button v-if="!follow" class="bbi-btn bbi-btn-sm" type="button" @click="resume">停在这里了，回到最新</button>
+          <span class="bbi-stream-spacer"></span>
+          <button class="bbi-btn bbi-btn-sm" type="button" :disabled="!streamView.text" @click="copyAll">复制全部</button>
+        </div>
       </template>
       <p v-else class="bbi-stream-hint">还没有流式请求。</p>
     </div>
@@ -113,5 +159,14 @@ onUnmounted(() => {
   font-size: 12px;
   white-space: pre-wrap;
   word-break: break-all;
+}
+.bbi-stream-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.bbi-stream-spacer {
+  flex: 1 1 auto;
 }
 </style>
