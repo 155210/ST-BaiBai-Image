@@ -9,7 +9,8 @@ import PassageList from './PassageList.vue';
 import type { Passage } from './passage';
 
 /**
- * 楼层「挑一段生图」/「再加图」弹窗。可以分几组挑段落,每组出一张,只调一次 AI(floorPassageGen.ts 命令式挂载,纪律同 PromptEditor:
+ * 楼层「挑一段生图」/「再加图」/「重新生成」弹窗。可以分几组挑段落,每组出一张,只调一次 AI;
+ * 重新生成时还能不指定段落、只定最多几张(floorPassageGen.ts 命令式挂载,纪律同 PromptEditor:
  * 状态一律走 props/emit,不用 ref 拿实例)。
  */
 const props = defineProps<{
@@ -19,14 +20,22 @@ const props = defineProps<{
   closing?: boolean;
   /** 本楼已有几张图;大于 0 就是「再加一张」 */
   existing?: number;
+  /** 给了就是已有 tag 的楼「重新生成」:多一个「不指定段落」模式,值是「最多几张」的初始值 */
+  regenMax?: number;
 }>();
 
 const emit = defineEmits<{
   (e: 'submit', groups: string[][], extra: string): void;
+  (e: 'auto', count: number): void;
   (e: 'close'): void;
 }>();
 
 const open = ref(false);
+const regen = computed(() => props.regenMax !== undefined);
+/** 重新生成默认不指定段落(和原来点「重新生成」一样由 AI 挑) */
+const mode = ref<'auto' | 'pick'>(props.regenMax !== undefined ? 'auto' : 'pick');
+const count = ref(Math.max(1, Math.floor(props.regenMax ?? 1)));
+const countValid = computed(() => Number.isInteger(count.value) && count.value >= 1);
 const groups = ref<string[][]>([[]]);
 const current = ref(0);
 const extra = ref('');
@@ -63,6 +72,10 @@ function removeGroup(): void {
 }
 
 function submit(): void {
+  if (mode.value === 'auto') {
+    if (countValid.value) emit('auto', count.value);
+    return;
+  }
   // 按正文顺序排,第 1 张就是最靠前的那组
   const order = props.passages.map(p => p.id);
   const sorted = filled.value.map(group => [...group]).sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]));
@@ -97,11 +110,27 @@ onBeforeUnmount(() => {
   <ModalMask :open="open" top-layer @close="emit('close')">
     <div class="bbi-modal" role="dialog" aria-modal="true" aria-label="挑段落生图">
       <header class="bbi-modal-head">
-        <span class="bbi-modal-title">{{ existing ? '再加图' : '挑段落生图' }}（第 {{ floor }} 楼）</span>
+        <span class="bbi-modal-title">{{ regen ? '重新生成 tag' : existing ? '再加图' : '挑段落生图' }}（第 {{ floor }} 楼）</span>
       </header>
+      <template v-if="regen">
+        <p class="bbi-passage-gen__tip">会先删掉本楼原来的 tag 再写新的；已生成的图片保留在卡片历史里，不会丢失。</p>
+        <div class="bbi-segmented" role="tablist" aria-label="画哪些段落">
+          <button class="bbi-seg" :class="{ 'is-on': mode === 'auto' }" type="button" role="tab" :aria-selected="mode === 'auto'" @click="mode = 'auto'">
+            不指定段落
+          </button>
+          <button class="bbi-seg" :class="{ 'is-on': mode === 'pick' }" type="button" role="tab" :aria-selected="mode === 'pick'" @click="mode = 'pick'">
+            指定段落
+          </button>
+        </div>
+      </template>
+      <label v-if="mode === 'auto'" class="bbi-passage-gen__count">
+        <span class="bbi-modal-label">最多几张（AI 自己挑画面，不设上限）</span>
+        <input v-model.number="count" class="bbi-input" type="number" min="1" step="1" inputmode="numeric" enterkeyhint="done" />
+      </label>
+      <template v-else>
       <p class="bbi-passage-gen__tip">
         点选要画的段落（可多选）就是一张图；想多出几张，点「＋ 再分一张」接着挑下一组。几张一起只问一次 AI，写完直接出图。
-        <template v-if="existing">本楼已有 {{ existing }} 张图，新图会放在各自段落后面，原来的图不动。</template>
+        <template v-if="existing && !regen">本楼已有 {{ existing }} 张图，新图会放在各自段落后面，原来的图不动。</template>
       </p>
       <div class="bbi-passage-gen__groups" role="tablist">
         <button
@@ -141,17 +170,19 @@ onBeforeUnmount(() => {
           placeholder="比如：全身构图、加上下雨的背景"
         />
       </label>
+      </template>
       <footer class="bbi-modal-foot">
         <span class="bbi-passage-gen__spacer"></span>
         <button class="bbi-btn" type="button" @click="emit('close')">取消</button>
         <button
           class="bbi-btn bbi-btn-primary"
           type="button"
-          :disabled="!filled.length || !configured"
+          :disabled="(mode === 'auto' ? !countValid : !filled.length) || !configured"
           :title="configured ? '' : '请先在柏宝绘「渠道」页完成配置'"
           @click="submit"
         >
-          {{ existing ? '加' : '生成' }}{{ filled.length > 1 ? ` ${filled.length} 张` : '这一张' }}
+          <template v-if="mode === 'auto'">重新生成</template>
+          <template v-else>{{ existing && !regen ? '加' : '生成' }}{{ filled.length > 1 ? ` ${filled.length} 张` : '这一张' }}</template>
         </button>
       </footer>
     </div>
@@ -197,6 +228,16 @@ onBeforeUnmount(() => {
 .bbi-passage-gen__group--del {
   margin-left: auto;
   border-style: dashed;
+}
+
+.bbi-passage-gen__count {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bbi-passage-gen__count .bbi-input {
+  width: 8em;
 }
 
 .bbi-passage-gen__extra {

@@ -80,3 +80,19 @@ describe('分组挑段落', async () => {
     expect(passageTaskNote(hint)).toContain('恰好返回 2 项');
   });
 });
+
+describe('重新生成的张数 regenImageOptions', async () => {
+  const { regenImageOptions } = await import('./passage');
+  const base = { minImages: 1, maxImages: 2, other: 'x' };
+
+  it('填了就覆盖上限,不封顶;下限不超过上限', () => {
+    expect(regenImageOptions(base, 12)).toEqual({ minImages: 1, maxImages: 12, other: 'x' });
+    expect(regenImageOptions({ ...base, minImages: 3 }, 2)).toMatchObject({ minImages: 2, maxImages: 2 });
+  });
+
+  it('没填或填坏了原样用设置', () => {
+    expect(regenImageOptions(base, undefined)).toBe(base);
+    expect(regenImageOptions(base, 0)).toBe(base);
+    expect(regenImageOptions(base, Number.NaN)).toBe(base);
+  });
+});

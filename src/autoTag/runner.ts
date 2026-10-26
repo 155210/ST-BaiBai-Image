@@ -11,7 +11,7 @@ import { autoTagProfile, buildAutoTagMessages } from '@/autoTag/prompt';
 import { rebaseImagePositions, type RebaseReport } from '@/autoTag/rebase';
 import { buildSlotTaskNote } from '@/autoTag/slotPlan';
 import { withRewriteHint } from '@/rewriteHint/hint';
-import { focusImageCount, passageTaskNote } from '@/rewriteHint/passage';
+import { focusImageCount, passageTaskNote, regenImageOptions } from '@/rewriteHint/passage';
 import { pinFocusPosition, placeSlotTag, slotExtraUpdate } from '@/rewriteHint/move';
 import { addFocusedTags, dropAddedMark, waitFloorIdle } from '@/rewriteHint/move';
 import {
@@ -124,6 +124,8 @@ interface RunOptions {
   focus?: string;
   /** fork:已有图的楼「再加一张」——配合 focus,新图插到所选段落后,原有 tag 与图不动。 */
   add?: boolean;
+  /** fork:楼层「重新生成」不指定段落时用户填的「最多几张」,覆盖设置里的上限。 */
+  count?: number;
 }
 
 /**
@@ -331,7 +333,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
     const focusCount = slot ? 1 : focusImageCount(opts.focus); // fork:挑段落几组就几张
     const promptOptions = slot || opts.focus // fork:挑一段生图同样恰好 1 张
       ? { ...settings.autoTag, minImages: focusCount, maxImages: focusCount }
-      : settings.autoTag;
+      : regenImageOptions(settings.autoTag, opts.count); // fork:重新生成时用户定的张数上限
     // 协议形态开跑时快照一次:写协议、验收与收尾同一份,用户中途拨开关也不会前后不一
     const profile = autoTagProfile();
     const messages = await buildAutoTagMessages(
@@ -686,6 +688,11 @@ export async function requestFloorTags(
 /** fork:还没 tag 的楼「挑一段生图」,hint 是 passageHint 拼好的「只画这几段」要求。 */
 export async function requestFocusedTags(floor: number, hint: string, add = false): Promise<TagRunOutcome> {
   return runForFloor(floor, { manual: true, focus: hint, add });
+}
+
+/** fork:已有 tag 的楼「重新生成」:focus = 指定段落(几组几张),count = 不指定时最多几张。 */
+export async function requestRegenTags(floor: number, choice: { focus?: string; count?: number }): Promise<TagRunOutcome> {
+  return runForFloor(floor, { manual: true, replace: true, focus: choice.focus, count: choice.count });
 }
 
 export async function requestSlotTag(floor: number, seq: number, hint = ''): Promise<void> {
