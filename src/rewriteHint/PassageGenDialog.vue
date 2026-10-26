@@ -29,11 +29,15 @@ const props = defineProps<{
   drawn?: Record<string, number[]>;
   /** 上次没写成时带回来的分组与要求 */
   initial?: { groups: string[][]; extra: string };
+  /** initial 是上次没写成带回来的,还是点「保存」存下的 */
+  initialKind?: 'failed' | 'draft';
 }>();
 
 const emit = defineEmits<{
   (e: 'submit', groups: string[][], extra: string): void;
   (e: 'auto', count: number): void;
+  (e: 'save', groups: string[][], extra: string): void;
+  (e: 'discard'): void;
   (e: 'close'): void;
 }>();
 
@@ -65,6 +69,22 @@ const labels = computed(() => {
 });
 
 const filled = computed(() => groups.value.filter(group => group.length));
+
+/** 带回来的选择还在用(点了「清空重选」就不再提示) */
+const restored = ref(!!props.initial);
+const canSave = computed(() => filled.value.length > 0 || !!extra.value.trim());
+
+function discard(): void {
+  groups.value = [[]];
+  current.value = 0;
+  extra.value = '';
+  restored.value = false;
+  emit('discard');
+}
+
+function save(): void {
+  if (canSave.value) emit('save', groups.value.map(group => [...group]), extra.value);
+}
 
 const strip = ref<HTMLElement | null>(null);
 
@@ -146,7 +166,11 @@ onBeforeUnmount(() => {
         点选要画的段落（可多选）就是一张图；想多出几张，点「＋ 再分一张」接着挑下一组。几张一起只问一次 AI，写完直接出图。
         <template v-if="existing && !regen">本楼已有 {{ existing }} 张图（列表里标了各插在哪段后面；按段落出的会在那几段上标「出过第 N 张」），新图会放在各自段落后面，原来的图不动。</template>
       </p>
-      <p v-if="initial" class="bbi-passage-gen__tip bbi-passage-gen__restored">上次没写成，已带上上次选的 {{ initial.groups.length }} 组段落和要求，可以直接再发。</p>
+      <p v-if="restored && initial && initialKind !== 'draft'" class="bbi-passage-gen__tip bbi-passage-gen__restored">上次没写成，已带上上次选的 {{ initial.groups.length }} 组段落和要求，可以直接再发。</p>
+      <p v-if="restored && initialKind === 'draft'" class="bbi-passage-gen__tip bbi-passage-gen__restored">
+        接着上次保存的选（{{ filled.length }} 组段落），可以继续挑。
+        <button type="button" class="bbi-passage-gen__link" @click="discard">清空重选</button>
+      </p>
       <div ref="strip" class="bbi-passage-gen__groups" role="tablist">
         <button
           v-for="(group, i) in groups"
@@ -189,6 +213,16 @@ onBeforeUnmount(() => {
       </label>
       </template>
       <footer class="bbi-modal-foot">
+        <button
+          v-if="mode === 'pick'"
+          class="bbi-btn"
+          type="button"
+          :disabled="!canSave"
+          title="先存着，下次打开这一楼的挑段落接着选"
+          @click="save"
+        >
+          保存
+        </button>
         <span class="bbi-passage-gen__spacer"></span>
         <button class="bbi-btn" type="button" @click="emit('close')">取消</button>
         <button
@@ -285,6 +319,16 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.bbi-passage-gen__link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .bbi-passage-gen__spacer {

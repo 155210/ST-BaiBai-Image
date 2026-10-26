@@ -15,6 +15,7 @@ import { hydrateMessage } from '@/floor/hydrate';
 import { openLightbox } from '@/floor/lightbox';
 import { confirmImageMissing, isImageMissing } from '@/floor/missingImages';
 import { openPromptEditor } from '@/floor/promptEditor';
+import { hasSlotVersions, openSlotVersions } from '@/promptVersions/restore'; // fork:提示词历史
 import { generateSlot } from '@/floor/slotGenerate';
 import { deleteImageResult, promptHash, type BbiImageEntry } from '@/floor/storage';
 import { isTagPlanning } from '@/floor/tagPlanState';
@@ -512,6 +513,15 @@ onMounted(() => {
             @click="menuOpen = false; openEditor()"
           >
             <Icon name="edit" :size="15" />
+          </button>
+          <button
+            v-if="hasSlotVersions({ chatId, messageId, swipeId, seq }, tag)"
+            class="bbi-fab"
+            type="button"
+            title="提示词历史（换回改之前的）"
+            @click="menuOpen = false; openSlotVersions({ chatId, messageId, swipeId, seq })"
+          >
+            <Icon name="history" :size="15" />
           </button>
           <button
             v-if="promptText"

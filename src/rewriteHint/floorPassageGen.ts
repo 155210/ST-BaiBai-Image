@@ -16,6 +16,7 @@ import { bindMultiRewriteButtons } from './floorMultiRewrite';
 import { drawnPassages } from './sources';
 import { floorPassages, passageGroupsHint } from './passage';
 import PassageGenDialog from './PassageGenDialog.vue';
+import { clearDraft, draftFrom, draftPick, readDraft, saveDraft } from './pickDraft';
 
 /**
  * 楼层上的「挑一段生图」(本 fork 独有)。
@@ -114,7 +115,11 @@ export function openPassageGenDialog(floor: number, handlers: DialogHandlers, ex
   const passages = floorPassages(floor);
   const key = pickKey(floor);
   const text = getContext()?.chat?.[floor]?.mes ?? '';
-  const initial = restorablePick(lastPicks.get(key), text, regenMax !== undefined, passages.map(p => p.id));
+  const regen = regenMax !== undefined;
+  const failed = restorablePick(lastPicks.get(key), text, regen, passages.map(p => p.id));
+  // 上次没写成的优先;否则看有没有点「保存」存下的半截选择
+  const saved = failed ? undefined : draftPick(readDraft(key), regen, passages);
+  const initial = failed ?? saved;
   const marks = existing > 0 ? existingImageMarks(floor) : {};
   const drawn = existing > 0 ? drawnPassages(floor) : {};
   const container = document.createElement('div');
@@ -151,6 +156,7 @@ export function openPassageGenDialog(floor: number, handlers: DialogHandlers, ex
         marks,
         drawn,
         initial,
+        initialKind: failed ? 'failed' : saved ? 'draft' : undefined,
         configured: backendStatus().configured,
         closing,
         onClose: close,
@@ -159,13 +165,21 @@ export function openPassageGenDialog(floor: number, handlers: DialogHandlers, ex
           const chosen = groups.map(ids => passages.filter(p => ids.includes(p.id)));
           // 段落那几行不截断(分组多时会超过要求的字数上限),只截用户另写的要求
           const hint = [passageGroupsHint(chosen), normalizeRewriteHint(extra)].filter(s => s.trim()).join('\n');
+          clearDraft(key);
           lastPicks.delete(key);
-          lastPicks.set(key, { regen: regenMax !== undefined, groups, extra, text });
+          lastPicks.set(key, { regen, groups, extra, text });
           while (lastPicks.size > MAX_PICKS) lastPicks.delete(lastPicks.keys().next().value as string);
           settled = true;
           close();
           if (hint) handlers.onSubmit(hint);
         },
+        onSave: (groups: string[][], extra: string) => {
+          if (closing) return;
+          saveDraft(key, draftFrom(regen, groups, extra, passages));
+          toastr.success('已保存，下次打开这一楼的挑段落会接着选', '柏宝绘');
+          close();
+        },
+        onDiscard: () => clearDraft(key),
         onAuto: (count: number) => {
           if (closing) return;
           settled = true;
