@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   BBI_CHAR_EXTRA_KEY,
+  buildEntryTag,
   applyCharTagOps,
   computeLockedCharTagNames,
   createCharTagNewOp,
@@ -45,7 +46,7 @@ describe('char tags store normalize', () => {
     expect(entries).toEqual([
       {
         name: '阿黛尔',
-        fields: { fandom: '', sex: '1girl', hair: 'short silver hair', eyes: '', skin: '', body: '', extra: '', outfit: '' },
+        fields: { fandom: '', sex: '1girl', hair: 'short silver hair', eyes: '', skin: '', body: '', bust: '', extra: '', outfit: '' },
         raw: '',
         nl: '',
         source: 'book',
@@ -54,7 +55,7 @@ describe('char tags store normalize', () => {
       },
       {
         name: '铁匠老周',
-        fields: { fandom: '', sex: '1boy', hair: '', eyes: '', skin: '', body: '', extra: '', outfit: '' },
+        fields: { fandom: '', sex: '1boy', hair: '', eyes: '', skin: '', body: '', bust: '', extra: '', outfit: '' },
         raw: '',
         nl: '',
         source: 'manual',
@@ -71,7 +72,7 @@ describe('char tags store normalize', () => {
     });
     expect(entries).toHaveLength(1);
     expect(entries[0].raw).toBe('1girl, red eyes');
-    expect(entries[0].fields).toEqual({ fandom: '', sex: '', hair: '', eyes: '', skin: '', body: '', extra: '', outfit: '' });
+    expect(entries[0].fields).toEqual({ fandom: '', sex: '', hair: '', eyes: '', skin: '', body: '', bust: '', extra: '', outfit: '' });
     expect(entries[0].source).toBe('book');
     expect(entries[0].desc).toBe('红瞳');
   });
@@ -236,5 +237,19 @@ describe('global library merge & lock', () => {
     const base = [globalEntry('玩家', { sex: '1boy', hair: 'short black hair' })];
     expect(deriveCharTags(base, chat, chat.length, new Set(['玩家']))[0].fields.hair).toBe('short black hair');
     expect(deriveCharTags(base, chat)[0].fields.hair).toBe('long red hair');
+  });
+});
+
+describe('罩杯字段兼容旧数据', () => {
+  it('旧版没有 bust 的条目读进来补成空,拼出的 tag 不变', () => {
+    const fields = { ...emptyCharFields(), sex: '1girl', hair: 'long hair', body: 'petite, small breasts' };
+    const old = { ...fields } as Record<string, string>;
+    delete old.bust;
+    expect(buildEntryTag({ fields: { ...emptyCharFields(), ...old }, raw: '' })).toBe('1girl, long hair, petite, small breasts');
+  });
+
+  it('填了罩杯就跟在体型后面', () => {
+    const fields = { ...emptyCharFields(), sex: '1girl', hair: 'long hair', body: 'petite', bust: 'large breasts', extra: 'mole' };
+    expect(buildEntryTag({ fields, raw: '' })).toBe('1girl, long hair, petite, large breasts, mole');
   });
 });

@@ -69,7 +69,8 @@ const FIELD_PLACEHOLDERS: Record<CharTagField, string> = {
   hair: '如 long black hair',
   eyes: '如 red eyes',
   skin: '如 pale skin(可不填)',
-  body: '如 petite, small breasts',
+  body: '如 petite / tall',
+  bust: '女性填: flat chest / small breasts / medium breasts / large breasts / huge breasts', // fork:罩杯
   extra: '如 heterochromia(可不填)',
   outfit: '固定着装,可不填',
 };

@@ -73,14 +73,15 @@ const CONVERT_SPEC = `你是外貌 tag 转换器。把给出的角色中文外�
 - hair(头发):long black hair / short silver hair 等
 - eyes(眼睛):red eyes / blue eyes 等
 - skin(肤色):tan / dark skin 等(没提就留空;白皙是默认肤色,不需要记录)
-- body(体型):petite / tall / slim / small breasts 等
+- body(体型):petite / tall / slim 等
+- bust(胸部,女性才填):flat chest / small breasts / medium breasts / large breasts / huge breasts 选一
 - extra(标志特征):heterochromia / scar on cheek / pointy ears 等(没提就留空)
 
 规则:
 1. 只提取固定基础特征;服装、饰品、状态、表情、动作、场景一律不写。
 2. hair 与 eyes 是二次元角色身份锚点：描述里只要出现发色、发型/长度或瞳色线索就必须写入对应字段，不得遗漏或塞进 extra；hair 尽量同时保留颜色和长度/发型，eyes 保留颜色。
 3. 描述里没提的细节不要脑补,对应字段留空字符串。
-4. 只返回一个 JSON 对象:{"角色名":{"sex":"...","hair":"...","eyes":"...","skin":"...","body":"...","extra":"..."}},键与输入的角色名完全一致;不要 Markdown 代码块、不要解释。`;
+4. 只返回一个 JSON 对象:{"角色名":{"sex":"...","hair":"...","eyes":"...","skin":"...","body":"...","bust":"...","extra":"..."}},键与输入的角色名完全一致;不要 Markdown 代码块、不要解释。`;
 
 /** 字段值清洗:换行压成空格、剥 bbi_image 系子标签字面量(防止污染注入格式)。 */
 function sanitizeTagValue(value: unknown): string {

@@ -76,6 +76,26 @@ describe('实时输出:收起不刷新,展开节流刷新', () => {
     expect(floorStreams().filter(l => l.chatId === 'k' && l.floor === 7).map(l => l.source)).toEqual(['第 7 楼 · 第 2 次']);
     b.end();
   });
+
+  it('不分哪一楼只留最近两次:第 3 次开始时第 1 次的去掉', async () => {
+    const { floorStreams } = await import('./live');
+    const shown = () => floorStreams().filter(l => l.chatId === 'm').map(l => l.source);
+    beginStream('1 楼', { chatId: 'm', floor: 1 }).end();
+    beginStream('2 楼', { chatId: 'm', floor: 2 }).end();
+    expect(shown()).toEqual(['1 楼', '2 楼']);
+    const c = beginStream('2 楼又一次', { chatId: 'm', floor: 2 });
+    expect(shown()).toEqual(['2 楼又一次']);
+    c.end();
+    beginStream('3 楼', { chatId: 'm', floor: 3 }).end();
+    expect(shown()).toEqual(['2 楼又一次', '3 楼']);
+  });
+
+  it('还在接收的不去掉', async () => {
+    const { trimRuns } = await import('./live');
+    const run = (id: number, done: boolean) => ({ id, done }) as never;
+    expect(trimRuns([run(1, false), run(2, true), run(3, false)], 2).map((l: { id: number }) => l.id)).toEqual([1, 3]);
+    expect(trimRuns([run(1, false), run(2, false), run(3, false)], 2).map((l: { id: number }) => l.id)).toEqual([1, 2, 3]);
+  });
 });
 
 describe('楼层折叠区用的在途登记', () => {
