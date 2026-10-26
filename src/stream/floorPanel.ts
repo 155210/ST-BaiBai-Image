@@ -3,7 +3,8 @@ import { getContext } from '@/st/context';
 import { cancelFloorTags } from '@/autoTag/runner';
 import { copyText } from '@/st/clipboard';
 
-import { floorStreams, onStreamsChange, REFRESH_MS, tailText, type Live } from './live';
+import { drawFull, hasNew, NOTHING_DRAWN, type Drawn } from './appendText';
+import { floorStreams, onStreamsChange, REFRESH_MS, type Live } from './live';
 import { readOpenPref, writeOpenPref } from './openPref';
 
 /**
@@ -14,7 +15,7 @@ import { readOpenPref, writeOpenPref } from './openPref';
  *
  * 手机性能:
  * - 收起时只有一行静态标题,不跑定时器、不碰 DOM;新内容只拼进 live.ts 的字符串;
- * - 展开后每 0.5 秒刷新一次,只显示结尾 MAX_SHOWN 个字;
+ * - 展开后每 0.5 秒刷新一次,显示全文,但只把新来的那截追加上去(appendText.ts);
  * - 文字写进同一个 Text 节点的 data(characterData 变更),#chat 的 childList 观察器
  *   (floor/chatObserver.ts)看不见它,不会每次刷新都唤醒楼层按钮对账、卡片自愈。
  *
@@ -25,8 +26,6 @@ import { readOpenPref, writeOpenPref } from './openPref';
 
 const PANEL_CLASS = 'bbi-live-floor';
 const STYLE_ID = 'bbi-live-floor-style';
-/** 楼层上只显示结尾这么多字:楼层里的框小,手机上也不必每次塞两万字进去。 */
-const MAX_SHOWN = 4000;
 
 interface Panel {
   floor: number;
@@ -42,8 +41,8 @@ interface Panel {
   text: Text;
   open: boolean;
   timer: ReturnType<typeof setInterval> | null;
-  /** 上次画到界面上的累计字数,没变就不重写文本。 */
-  shownTotal: number;
+  /** 已经画到界面上的部分,新内容只追加。 */
+  drawn: Drawn;
   /** 在底部跟着最新内容走;往上翻了就定住。 */
   follow: boolean;
 }
@@ -88,15 +87,14 @@ function render(panel: Panel): void {
   panel.resume.hidden = panel.follow;
   panel.stop.hidden = live.done;
   // 写完且已画到最后:停掉刷新定时器
-  if (live.done && live.total === panel.shownTotal && panel.timer) {
+  if (live.done && !hasNew(live, panel.drawn) && panel.timer) {
     clearInterval(panel.timer);
     panel.timer = null;
   }
-  // 收起时不碰文字;往上翻着看时也不动,不然开头被截掉、看的地方会一直往上跑
-  if (!panel.open || live.total === panel.shownTotal || !panel.follow) return;
-  panel.shownTotal = live.total;
-  panel.text.data = tailText(live, MAX_SHOWN);
-  panel.pre.scrollTop = panel.pre.scrollHeight;
+  // 收起时不碰文字。往上翻着看时也照常追加:前面的字不动,看的地方不会跑,只是不自动滚到底
+  if (!panel.open || !hasNew(live, panel.drawn)) return;
+  panel.drawn = drawFull(panel.text, live, panel.drawn);
+  if (panel.follow) panel.pre.scrollTop = panel.pre.scrollHeight;
 }
 
 function onPanelScroll(panel: Panel): void {
@@ -116,7 +114,7 @@ function setOpen(panel: Panel, open: boolean): void {
   panel.tools.hidden = !open;
   panel.meta.hidden = !open;
   if (open) {
-    panel.shownTotal = -1;
+    panel.drawn = NOTHING_DRAWN;
     panel.follow = true;
     render(panel);
     if (!panel.timer && !panel.live.done) panel.timer = setInterval(() => render(panel), REFRESH_MS);
@@ -165,13 +163,13 @@ function createPanel(floor: number, live: Live): Panel {
   tools.append(resume, stop, copy);
   el.append(head, pre, tools);
 
-  const panel: Panel = { floor, live, el, meta, title, toggle, tools, resume, stop, pre, text, open: false, timer: null, shownTotal: -1, follow: true };
+  const panel: Panel = { floor, live, el, meta, title, toggle, tools, resume, stop, pre, text, open: false, timer: null, drawn: NOTHING_DRAWN, follow: true };
   pre.addEventListener('scroll', () => onPanelScroll(panel), { passive: true });
   resume.addEventListener('click', event => {
     event.stopPropagation();
     panel.follow = true;
-    panel.shownTotal = -1;
     render(panel);
+    panel.pre.scrollTop = panel.pre.scrollHeight;
   });
   stop.addEventListener('click', event => {
     event.stopPropagation();
@@ -218,7 +216,7 @@ function reconcile(): void {
     }
     if (panel.live !== live) {
       panel.live = live;
-      panel.shownTotal = -1;
+      panel.drawn = NOTHING_DRAWN;
       panel.follow = true;
       if (panel.open && !panel.timer) panel.timer = setInterval(() => render(panel), REFRESH_MS);
     }
