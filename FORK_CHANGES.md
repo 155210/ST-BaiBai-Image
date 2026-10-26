@@ -37,6 +37,12 @@
 | src/floor/Lightbox.vue | ref="lightboxEl" class="bbi-lightbox" | 同上：给遮罩挂 ref | 大图黑屏一截 |
 | src/floor/lightbox.ts | nav: options.nav, | 同上：传给灯箱 | 图片浏览左右切换 |
 | src/floor/lightbox.ts | export function closeLightbox | 切到没图的卡片时关掉灯箱 | 图片浏览左右切换 |
+| src/floor/Lightbox.vue | import ImageContextView from '@/imageContext/ImageContext.vue'; | 大图下面、提示词上面显示这张图前面的几段正文 | 大图对照正文 |
+| src/floor/Lightbox.vue | import type { ImageContextText } from '@/imageContext/before'; | 同上 | 大图对照正文 |
+| src/floor/Lightbox.vue | context?: ImageContextText | 同上：灯箱接收正文 | 大图对照正文 |
+| src/floor/Lightbox.vue | <ImageContextView v-if="context" :context="context" /> | 同上：放在提示词上面 | 大图对照正文 |
+| src/floor/lightbox.ts | import type { ImageContextText } from '@/imageContext/before'; | 同上 | 大图对照正文 |
+| src/floor/lightbox.ts | context: options.context, | 同上：传给灯箱 | 大图对照正文 |
 | src/floor/PromptEditor.vue | import RewriteHintBox from '@/rewriteHint/RewriteHintBox.vue'; | 引入重写要求输入框 | #6 |
 | src/floor/PromptEditor.vue | const rewriteHint = ref(''); | 重写要求的状态 | #6 |
 | src/floor/PromptEditor.vue | <RewriteHintBox v-model="rewriteHint" | 「AI 重写提示词」按钮上方的输入框 | #6 |
@@ -137,6 +143,7 @@
 - `src/floor/slotGenerate.ts`：单张出图（卡片与批量共用）
 - `src/state/backup.ts`、`src/pages/settings/BackupSection.vue`：导出 / 导入设置
 - `src/lightboxNav/`、`src/batch/galleryLightbox.ts`、`src/pages/batch/EmptySlotView.vue`：图片浏览大图左右切换
+- `src/imageContext/`：图片浏览的大图下面、提示词上面显示这张图前面的几段正文，方便对照图和文字
 - `src/viewportFit/`：大图（聊天里的和图片浏览里的）按手机实际可见屏幕摆位置和高度，地址栏伸缩后底下不露黑屏、顶上按钮不被状态栏挡
 - `src/naiQuota/`：NAI 官方订阅额度与 Anlas 显示、每张费用估算、「只用免费额度」开关（批量遇到会直接暂停）
 - `src/rewriteHint/`：AI 重写提示词时可以写额外要求；「挑正文里的一段」点选本楼段落只画那几段；楼层「⋯」里有「挑一段生图」按钮（可一次挑几组段落、每组一张，只调一次 AI；已有图的楼是「再加图」，新图插到所选段落后、原来的图不动）；楼层「重新生成 tag」可以不指定段落并定最多几张，或指定段落几组几张；按段落出的图会记下是哪几段（消息 extra 的 bbiPassageSources），再加图时标在那几段上；没写成时再打开会带上上次选的段落；有图的楼「⋯」里还有「一起改这层的图」，每张写修改要求、一次发给 AI 一起改；重写提示词时把每张图在正文里的位置一并报给 AI（slotPosition.ts），免得它自己推算

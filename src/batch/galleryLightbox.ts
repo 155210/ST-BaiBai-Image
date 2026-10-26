@@ -14,6 +14,8 @@ import type { LightboxNav } from '@/lightboxNav/types';
 import EmptySlotView from '@/pages/batch/EmptySlotView.vue';
 import { getContext } from '@/st/context';
 import { formatPromptText } from '@/st/imageTagRegex';
+import { textBeforeImage } from '@/imageContext/before';
+import { settings } from '@/state/settings';
 
 /**
  * 图片浏览里点开大图:两侧大箭头按当前筛选和顺序在卡片之间切换,翻页也跟着走;
@@ -257,6 +259,7 @@ export function openGalleryLightbox(options: GalleryLightboxOptions): void {
     src: entry.path,
     prompt: [promptOf(view), entry.meta ? formatGenerationMeta(entry.meta) : ''].filter(Boolean).join('\n\n'),
     filename: imageDownloadFileName(entry.path, characterName, entry.generationId),
+    context: textBeforeImage(chat[view.floor]?.mes ?? '', view.seq, settings.excludes.customStripTags),
     // 不给 onDelete:作者灯箱栏上的垃圾桶不显示,删除只在「⋯」里
     nav,
   });
