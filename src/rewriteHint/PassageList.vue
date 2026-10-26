@@ -11,6 +11,8 @@ const props = defineProps<{
   modelValue: string[];
   /** 已归到别的组的段落:id → 角标(如「图1」);点它会改归当前组 */
   labels?: Record<string, string>;
+  /** 原来的图插在哪:段落 id → 跟在它后面的图(楼头的记在空串下) */
+  marks?: Record<string, Array<{ n: number; src?: string }>>;
 }>();
 
 const emit = defineEmits<{ (e: 'update:modelValue', value: string[]): void }>();
@@ -27,7 +29,14 @@ function toggle(id: string): void {
 <template>
   <p v-if="!passages.length" class="bbi-passage-empty">本楼正文没有可挑的段落。</p>
   <ul v-else class="bbi-passage-list">
-    <li v-for="p in passages" :key="p.id">
+    <li v-if="marks?.['']?.length" class="bbi-passage-marks">
+      <span v-for="m in marks['']" :key="m.n" class="bbi-passage-mark-img">
+        <img v-if="m.src" :src="m.src" alt="" loading="lazy" />
+        已有第 {{ m.n }} 张
+      </span>
+    </li>
+    <template v-for="p in passages" :key="p.id">
+    <li>
       <button
         type="button"
         class="bbi-passage"
@@ -39,6 +48,13 @@ function toggle(id: string): void {
         <span class="bbi-passage__text">{{ p.text }}</span>
       </button>
     </li>
+    <li v-if="marks?.[p.id]?.length" class="bbi-passage-marks">
+      <span v-for="m in marks[p.id]" :key="m.n" class="bbi-passage-mark-img">
+        <img v-if="m.src" :src="m.src" alt="" loading="lazy" />
+        已有第 {{ m.n }} 张
+      </span>
+    </li>
+    </template>
   </ul>
 </template>
 
@@ -107,6 +123,32 @@ function toggle(id: string): void {
   padding: 0 6px;
   border-radius: 11px;
   background: color-mix(in srgb, var(--bbi-accent, #7c9cff) 40%, transparent);
+}
+
+/* 原来的图插在这段后面 */
+.bbi-passage-marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -2px 0 0 30px;
+}
+
+.bbi-passage-mark-img {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px 2px 2px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bbi-accent, #7c9cff) 18%, transparent);
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.bbi-passage-mark-img img {
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  object-fit: cover;
 }
 
 .bbi-passage__text {

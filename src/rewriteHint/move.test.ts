@@ -99,3 +99,21 @@ describe('pinFocusPosition 多组', () => {
     expect(images.map(i => i.position)).toEqual(['P2', 'P4']);
   });
 });
+
+describe('imageAnchors', async () => {
+  const { imageAnchors } = await import('./move');
+
+  it('每个 tag 记在它前面那一段上', () => {
+    const text = [T('head'), '第一段', T('a'), T('b'), '第二段', '第三段', T('c')].join('\n');
+    expect(imageAnchors(text, [])).toEqual([
+      { passageId: '', seq: 0 },
+      { passageId: 'P1', seq: 1 },
+      { passageId: 'P1', seq: 2 },
+      { passageId: 'P3', seq: 3 },
+    ]);
+  });
+
+  it('tag 和正文在同一行:记在这一段', () => {
+    expect(imageAnchors(`第一段${T('a')}\n第二段`, [])).toEqual([{ passageId: 'P1', seq: 0 }]);
+  });
+});

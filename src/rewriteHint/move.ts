@@ -47,6 +47,31 @@ export function passageLine(text: string, id: string, stripTags: string[]): numb
   return hit ? hit.sourceLine : null;
 }
 
+/**
+ * 本楼每个 tag 紧跟在哪一段后面:返回 [{ passageId, seq }](seq 是楼内第几个 tag,0-based)。
+ * 段落编号按用户看到的口径(stripImageTags 后切段);tag 前面没有段落的记成空串。
+ * 「再加图」弹窗用它在段落列表里标出原来的图插在哪。
+ */
+export function imageAnchors(text: string, stripTags: string[]): Array<{ passageId: string; seq: number }> {
+  const shown = prepareTargetText(stripImageTags(text), stripTags).segments;
+  const masked = prepareTargetText(maskTags(text), stripTags).segments;
+  // masked 段落按顺序对回用户看到的编号(两边段数一致时就是逐个对应)
+  const idOf = (i: number) => (masked.length === shown.length ? shown[i].id : (shown.find(s => s.text === masked[i].text)?.id ?? ''));
+  const out: Array<{ passageId: string; seq: number }> = [];
+  let seq = 0;
+  text.split(/\r\n|\n|\r/).forEach((line, lineNo) => {
+    const count = (line.match(/<bbi_image>[\s\S]*?<\/bbi_image>/gi) || []).length;
+    for (let k = 0; k < count; k++) {
+      let at = -1;
+      masked.forEach((segment, i) => {
+        if (segment.sourceLine < lineNo || (segment.sourceLine === lineNo && k === 0 && !line.trim().startsWith('<bbi_image'))) at = i;
+      });
+      out.push({ passageId: at >= 0 ? idOf(at) : '', seq: seq++ });
+    }
+  });
+  return out;
+}
+
 /** 第 line 行(0-based)行尾的字符偏移;越界返回 null。 */
 function lineEnd(text: string, line: number): number | null {
   const newline = /\r\n|\n|\r/g;
