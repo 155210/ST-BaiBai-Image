@@ -149,6 +149,9 @@
 | src/floor/Card.vue | title="提示词历史（换回改之前的）" | 同上：按钮本身 | 提示词历史 |
 | src/floor/promptEditor.ts | import { rememberPrompt } from '@/promptVersions/restore'; | 改提示词时记下没出过图的旧提示词 | 提示词历史 |
 | src/floor/promptEditor.ts | rememberPrompt(message, at.swipeId, at.seq, at.rawTag), | 同上：和正文一起落盘 | 提示词历史 |
+| src/floor/PromptEditor.vue | import PromptOnlyEdit from '@/promptOnlyEdit/PromptOnlyEdit.vue'; | 编辑提示词里的「只改提示词（不发正文）」 | 只改提示词 |
+| src/floor/PromptEditor.vue | @result="fillDraft" | 同上：结果填进输入框 | 只改提示词 |
+| src/floor/PromptEditor.vue | function fillDraft(next: ImageTagContent) | 同上 | 只改提示词 |
 
 ## 其他本分支改动（不在原作者文件里，或合并时一定会冲突、手动处理）
 
@@ -167,6 +170,7 @@
 - `src/floorMenu/`：楼层「⋯」里柏宝绘的几个按钮收成一个 🎧，点开竖排菜单（原按钮照常注入，只是藏起来）
 - `src/imageContext/`：图片浏览的大图下面、提示词上面显示这张图前面的几段正文，方便对照图和文字
 - `src/promptVersions/`：一张图用过的提示词（出过图的从图片记录里找，没出过图就被改掉的记在消息 extra 的 bbiPromptMemo），点「换回这版」把提示词写回正文，那版的图跟着回来
+- `src/promptOnlyEdit/`：编辑提示词里的「只改提示词（不发正文）」，只把现在的提示词和要求发给 AI，改好填进输入框，用户自己点应用
 - `src/viewportFit/`：插件主面板和大图（聊天里的和图片浏览里的）按手机实际可见屏幕摆位置和高度，地址栏伸缩后底下不露黑屏、顶上按钮不被状态栏挡
 - `src/naiQuota/`：NAI 官方订阅额度与 Anlas 显示、每张费用估算、「只用免费额度」开关（批量遇到会直接暂停）
 - `src/rewriteHint/`：AI 重写提示词时可以写额外要求；「挑正文里的一段」点选本楼段落只画那几段；楼层「⋯」里有「挑一段生图」按钮（可一次挑几组段落、每组一张，只调一次 AI；已有图的楼是「再加图」，新图插到所选段落后、原来的图不动）；楼层「重新生成 tag」可以不指定段落并定最多几张，或指定段落几组几张；按段落出的图会记下是哪几段（消息 extra 的 bbiPassageSources），再加图时标在那几段上；没写成时再打开会带上上次选的段落；选了没生成就自动存着，下次打开接着选，点「清空」才清掉（pickDraft.ts，存在浏览器里、按段落原文找回）；有图的楼「⋯」里还有「一起改这层的图」，每张写修改要求、一次发给 AI 一起改；重写提示词时把每张图在正文里的位置一并报给 AI（slotPosition.ts），免得它自己推算
