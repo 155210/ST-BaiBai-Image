@@ -13,7 +13,7 @@ import { reactive } from 'vue';
  * charTagLib 只是响应式派生缓存:合并基线(本聊天优先,全局补同名空缺) + 按楼层物理顺序重放自动变化。
  */
 
-export type CharTagField = 'fandom' | 'sex' | 'hair' | 'eyes' | 'skin' | 'body' | 'extra' | 'outfit';
+export type CharTagField = 'fandom' | 'sex' | 'hair' | 'eyes' | 'skin' | 'body' | 'bust' | 'extra' | 'outfit';
 
 export const CHAR_TAG_FIELDS: readonly CharTagField[] = [
   'fandom',
@@ -22,6 +22,7 @@ export const CHAR_TAG_FIELDS: readonly CharTagField[] = [
   'eyes',
   'skin',
   'body',
+  'bust', // fork:罩杯
   'extra',
   'outfit',
 ];
@@ -33,6 +34,7 @@ export const CHAR_TAG_FIELD_LABELS: Record<CharTagField, string> = {
   eyes: '眼睛',
   skin: '肤色',
   body: '体型',
+  bust: '胸部', // fork:罩杯
   extra: '标志特征',
   outfit: '固定着装',
 };
@@ -151,7 +153,7 @@ export function lockedCharTagNames(): ReadonlySet<string> {
 }
 
 export function emptyCharFields(): Record<CharTagField, string> {
-  return { fandom: '', sex: '', hair: '', eyes: '', skin: '', body: '', extra: '', outfit: '' };
+  return { fandom: '', sex: '', hair: '', eyes: '', skin: '', body: '', bust: '', extra: '', outfit: '' };
 }
 
 export function charFieldsEmpty(fields: Record<CharTagField, string>): boolean {

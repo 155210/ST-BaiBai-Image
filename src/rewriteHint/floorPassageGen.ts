@@ -1,3 +1,4 @@
+import { bindFloorMenu } from '@/floorMenu/menu';
 import { h, render } from 'vue';
 
 import { requestFocusedTags } from '@/autoTag/runner';
@@ -269,5 +270,6 @@ export function bindPassageGenButtons(): boolean {
   onChatMutation(syncButtons);
   syncButtons();
   bindMultiRewriteButtons();
+  bindFloorMenu();
   return true;
 }

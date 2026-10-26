@@ -43,6 +43,15 @@
 | src/floor/Lightbox.vue | <ImageContextView v-if="context" :context="context" /> | 同上：放在提示词上面 | 大图对照正文 |
 | src/floor/lightbox.ts | import type { ImageContextText } from '@/imageContext/before'; | 同上 | 大图对照正文 |
 | src/floor/lightbox.ts | context: options.context, | 同上：传给灯箱 | 大图对照正文 |
+| src/state/charTags.ts | 'bust', // fork:罩杯 | 角色库加「胸部（罩杯）」字段，跟在体型后面拼进 tag；旧数据读进来补成空 | 角色库罩杯 |
+| src/state/charTags.ts | bust: '胸部', // fork:罩杯 | 同上：字段名 | 角色库罩杯 |
+| src/state/charTags.ts | body: '', bust: '', extra: '' | 同上：空字段 | 角色库罩杯 |
+| src/autoTag/protocol.ts | 'bust', // fork:罩杯 | 同上：AI 报的变化认这个字段 | 角色库罩杯 |
+| src/autoTag/prompt.ts | 女性角色 bust 必填一个胸部大小 tag | 同上：建档时女性必须写胸部大小 | 角色库罩杯 |
+| src/autoTag/prompt.ts | field 只能是 sex/hair/eyes/skin/body/bust/extra/outfit/fandom。 | 同上 | 角色库罩杯 |
+| src/autoTag/charAnchors.ts | - bust(胸部,女性才填) | 同上：中文外貌转字段时拆出胸部 | 角色库罩杯 |
+| src/autoTag/charAnchors.ts | "bust":"..." | 同上 | 角色库罩杯 |
+| src/pages/characters/index.vue | bust: '女性填: flat chest | 同上：输入框提示 | 角色库罩杯 |
 | src/floor/PromptEditor.vue | import RewriteHintBox from '@/rewriteHint/RewriteHintBox.vue'; | 引入重写要求输入框 | #6 |
 | src/floor/PromptEditor.vue | const rewriteHint = ref(''); | 重写要求的状态 | #6 |
 | src/floor/PromptEditor.vue | <RewriteHintBox v-model="rewriteHint" | 「AI 重写提示词」按钮上方的输入框 | #6 |
@@ -143,12 +152,13 @@
 - `src/floor/slotGenerate.ts`：单张出图（卡片与批量共用）
 - `src/state/backup.ts`、`src/pages/settings/BackupSection.vue`：导出 / 导入设置
 - `src/lightboxNav/`、`src/batch/galleryLightbox.ts`、`src/pages/batch/EmptySlotView.vue`：图片浏览大图左右切换
+- `src/floorMenu/`：楼层「⋯」里柏宝绘的几个按钮收成一个 🎧，点开竖排菜单（原按钮照常注入，只是藏起来）
 - `src/imageContext/`：图片浏览的大图下面、提示词上面显示这张图前面的几段正文，方便对照图和文字
 - `src/viewportFit/`：大图（聊天里的和图片浏览里的）按手机实际可见屏幕摆位置和高度，地址栏伸缩后底下不露黑屏、顶上按钮不被状态栏挡
 - `src/naiQuota/`：NAI 官方订阅额度与 Anlas 显示、每张费用估算、「只用免费额度」开关（批量遇到会直接暂停）
 - `src/rewriteHint/`：AI 重写提示词时可以写额外要求；「挑正文里的一段」点选本楼段落只画那几段；楼层「⋯」里有「挑一段生图」按钮（可一次挑几组段落、每组一张，只调一次 AI；已有图的楼是「再加图」，新图插到所选段落后、原来的图不动）；楼层「重新生成 tag」可以不指定段落并定最多几张，或指定段落几组几张；按段落出的图会记下是哪几段（消息 extra 的 bbiPassageSources），再加图时标在那几段上；没写成时再打开会带上上次选的段落；有图的楼「⋯」里还有「一起改这层的图」，每张写修改要求、一次发给 AI 一起改；重写提示词时把每张图在正文里的位置一并报给 AI（slotPosition.ts），免得它自己推算
 - `src/autoTag/heavyPreset.ts`、`src/pages/settings/HeavyPresetPanel.vue`：解析失败时改用酒馆预设（重型自定义提示词），也可以设成一开始就直接用
-- `src/stream/`：副 API 流式实时输出（往上翻看时定住、可复制全文、能中断这次写 tag；楼层上的折叠区写完后留到同一楼下次再写）、无响应超时
+- `src/stream/`：副 API 流式实时输出（往上翻看时定住、可复制全文、能中断这次写 tag；楼层上的折叠区写完后留着，不分哪一楼只留最近两次）、无响应超时
 - `src/streamSafe/`：酒馆正在流式出字时，写完 tag 的楼层更新通知先排队，输出完再补发
 - `src/fork.guard.test.ts`、本文件
 

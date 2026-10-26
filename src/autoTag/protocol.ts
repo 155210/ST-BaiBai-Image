@@ -60,6 +60,7 @@ const HISTORY_FIELDS: ReadonlySet<string> = new Set([
   'eyes',
   'skin',
   'body',
+  'bust', // fork:罩杯
   'extra',
   'outfit',
   'new',

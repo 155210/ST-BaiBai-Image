@@ -12,8 +12,11 @@ import { reactive } from 'vue';
 
 const VIEW_CHARS = 20000;
 const MAX_KEEP = 1_000_000;
-/** 楼层折叠区:每楼最近一条(写完也留着,下次同一楼开始写才换掉),最多记这么多楼。 */
-const MAX_FLOORS = 30;
+/**
+ * 楼层折叠区只留最近这么多次(不分哪一楼,同一楼再写也算一次):第 3 次开始时第 1 次的就去掉。
+ * 还在接收的不去掉。
+ */
+const KEEP_RUNS = 2;
 export const REFRESH_MS = 500;
 
 export interface Live {
@@ -42,7 +45,8 @@ let current: Live | null = null;
 /** 还在接收中的请求。楼层折叠区按它挂、按它撤。 */
 const active = new Map<number, Live>();
 const changeListeners = new Set<() => void>();
-const byFloor = new Map<string, Live>();
+/** 最近几次给楼层写的(开始顺序)。 */
+let recent: Live[] = [];
 
 function notifyChange(): void {
   for (const listener of changeListeners) {
@@ -65,9 +69,22 @@ export function activeStreams(): Live[] {
   return [...active.values()];
 }
 
-/** 每楼最近一条(含已结束的),楼层折叠区按它挂:写完不撤,同一楼下次开始写才换成新的。 */
+/** 最近几次里每楼最新的一条(含已结束的),楼层折叠区按它挂。 */
 export function floorStreams(): Live[] {
-  return [...byFloor.values()];
+  const latest = new Map<string, Live>();
+  for (const live of recent) {
+    const key = `${live.chatId}\u0000${live.floor}`;
+    latest.delete(key);
+    latest.set(key, live);
+  }
+  return [...latest.values()];
+}
+
+/** 只留最近 keep 次,超出的从最早的已结束的开始去掉(纯函数,便于单测)。 */
+export function trimRuns(runs: Live[], keep: number): Live[] {
+  let extra = runs.length - keep;
+  if (extra <= 0) return runs;
+  return runs.filter(live => !(extra > 0 && live.done && extra-- > 0));
 }
 
 /** 当前这条的完整文本(「复制」用)。 */
@@ -133,10 +150,7 @@ export function beginStream(source: string, meta: StreamMeta = {}): StreamTap {
   dirty = true;
   active.set(live.id, live);
   if (live.floor !== undefined) {
-    const key = `${live.chatId}\u0000${live.floor}`;
-    byFloor.delete(key);
-    byFloor.set(key, live);
-    while (byFloor.size > MAX_FLOORS) byFloor.delete(byFloor.keys().next().value as string);
+    recent = trimRuns([...recent, live], KEEP_RUNS);
   }
   notifyChange();
   return {
