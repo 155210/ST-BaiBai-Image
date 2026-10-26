@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import BbiTextarea from '@/components/BbiTextarea.vue';
 import ModalMask from '@/components/ModalMask.vue';
-import StreamView from '@/stream/StreamView.vue';
 
 import type { SlotItem } from './floorMultiRewrite';
 import { MAX_REWRITE_HINT } from './hint';
@@ -18,14 +17,11 @@ const props = defineProps<{
   items: SlotItem[];
   configured: boolean;
   closing?: boolean;
-  /** AI 正在改写:输入框锁住,显示实时输出 */
-  rewriting?: boolean;
 }>();
 
 const emit = defineEmits<{
   (e: 'submit', edits: SlotEdit[]): void;
   (e: 'close'): void;
-  (e: 'cancel'): void;
 }>();
 
 const open = ref(false);
@@ -36,17 +32,6 @@ watch(
   () => props.closing,
   value => {
     if (value) open.value = false;
-  },
-);
-
-// 开始改写时把进度和实时输出滚进视野:手机上几张图一列,它们在最底下看不到
-const busyEl = ref<HTMLElement | null>(null);
-watch(
-  () => props.rewriting,
-  async value => {
-    if (!value) return;
-    await nextTick();
-    busyEl.value?.scrollIntoView({ block: 'start' });
   },
 );
 
@@ -88,24 +73,14 @@ onBeforeUnmount(() => {
             :rows="1"
             :max-rows="4"
             :maxlength="MAX_REWRITE_HINT"
-            :disabled="rewriting"
             placeholder="这张怎么改（留空不改），比如：换成全身构图"
           />
         </li>
       </ul>
-      <div v-if="rewriting" ref="busyEl" class="bbi-multi-rewrite__running">
-        <p class="bbi-multi-rewrite__busy">
-          <span class="bbi-multi-rewrite__spin" />
-          AI 正在一起改写这几张的提示词，改好会自己关掉并开始出图。现在关掉窗口也不会中断。
-        </p>
-        <StreamView />
-      </div>
       <footer class="bbi-modal-foot">
         <span class="bbi-multi-rewrite__spacer"></span>
-        <button v-if="rewriting" class="bbi-btn" type="button" @click="emit('cancel')">取消改写</button>
-        <button v-else class="bbi-btn" type="button" @click="emit('close')">取消</button>
+        <button class="bbi-btn" type="button" @click="emit('close')">取消</button>
         <button
-          v-if="!rewriting"
           class="bbi-btn bbi-btn-primary"
           type="button"
           :disabled="!filled.length || !configured"
@@ -181,39 +156,6 @@ onBeforeUnmount(() => {
   opacity: 0.75;
   white-space: pre-wrap;
   word-break: break-word;
-}
-
-/* 弹窗是纵向 flex:不给 flex-shrink:0 的话实时输出会被压扁,而不是让弹窗滚动 */
-.bbi-multi-rewrite__running {
-  display: flex;
-  flex-shrink: 0;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.bbi-multi-rewrite__busy {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  font-size: 12.5px;
-  opacity: 0.85;
-}
-
-.bbi-multi-rewrite__spin {
-  flex: 0 0 auto;
-  width: 12px;
-  height: 12px;
-  border: 2px solid currentColor;
-  border-right-color: transparent;
-  border-radius: 50%;
-  animation: bbi-multi-rewrite-spin 0.8s linear infinite;
-}
-
-@keyframes bbi-multi-rewrite-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 .bbi-multi-rewrite__spacer {
