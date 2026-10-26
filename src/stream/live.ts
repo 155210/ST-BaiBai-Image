@@ -87,6 +87,11 @@ export function trimRuns(runs: Live[], keep: number): Live[] {
   return runs.filter(live => !(extra > 0 && live.done && extra-- > 0));
 }
 
+/** 当前这条(顶部实时输出画全文用)。 */
+export function currentLive(): Live | null {
+  return current;
+}
+
 /** 当前这条的完整文本(「复制」用)。 */
 export function currentFullText(): string {
   return current?.text ?? '';
@@ -110,6 +115,8 @@ export const streamView = reactive({
   floor: undefined as number | undefined,
   source: '',
   text: '',
+  /** 当前这条累计收到的字数(变了就说明有新内容)。 */
+  total: 0,
   running: false,
   error: '',
   /** 有过至少一次流式请求。 */
@@ -123,6 +130,7 @@ function flush(): void {
   streamView.floor = current?.floor;
   streamView.source = current?.source ?? '';
   streamView.text = liveText();
+  streamView.total = current?.total ?? 0;
   streamView.running = !!current && !current.done;
   streamView.error = current?.error ?? '';
   streamView.seen = !!current;
