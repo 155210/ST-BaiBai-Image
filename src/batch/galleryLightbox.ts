@@ -15,6 +15,7 @@ import EmptySlotView from '@/pages/batch/EmptySlotView.vue';
 import { getContext } from '@/st/context';
 import { formatPromptText } from '@/st/imageTagRegex';
 import { textBeforeImage } from '@/imageContext/before';
+import { hasSlotVersions, openSlotVersions } from '@/promptVersions/restore';
 import { settings } from '@/state/settings';
 
 /**
@@ -222,6 +223,11 @@ export function openGalleryLightbox(options: GalleryLightboxOptions): void {
       },
     },
   ];
+  // 提示词历史:换回改之前的提示词,poll 发现 tag 变了就按那版重开大图
+  const slotAt = { chatId: context.getCurrentChatId?.() ?? '', messageId: view.floor, swipeId: view.swipeId, seq: view.seq };
+  if (hasSlotVersions(slotAt, view.tag)) {
+    nav.menu.unshift({ label: '🕘 提示词历史（换回改之前的）', action: () => openSlotVersions(slotAt) });
+  }
   // 这张卡片正在生成(从聊天楼层、卡片或批量发起的都算):左上显示进度和取消,出完换成新图
   const key = slotKey(context.getCurrentChatId?.() ?? '', view.floor, view.swipeId, view.seq);
   const before = slotImage(view)?.generationId ?? '';

@@ -145,6 +145,10 @@
 | src/autoTag/runner.ts | // fork:加图没写成就撤掉它的出图标记 | 同上：失败收尾 | 再加一张 |
 | src/autoTag/runner.ts | // fork:加图只撤自己那枚 | 同上：异常收尾 | 再加一张 |
 | src/autoTag/runner.ts | focus: hint, add }); | 同上：入口带 add | 再加一张 |
+| src/floor/Card.vue | import { hasSlotVersions, openSlotVersions } from '@/promptVersions/restore'; | 卡片「⋯」里的「提示词历史」按钮 | 提示词历史 |
+| src/floor/Card.vue | title="提示词历史（换回改之前的）" | 同上：按钮本身 | 提示词历史 |
+| src/floor/promptEditor.ts | import { rememberPrompt } from '@/promptVersions/restore'; | 改提示词时记下没出过图的旧提示词 | 提示词历史 |
+| src/floor/promptEditor.ts | rememberPrompt(message, at.swipeId, at.seq, at.rawTag), | 同上：和正文一起落盘 | 提示词历史 |
 
 ## 其他本分支改动（不在原作者文件里，或合并时一定会冲突、手动处理）
 
@@ -162,9 +166,10 @@
 - `src/charBust/`：角色库「胸部」一栏的旧数据迁移（体型里的胸部词挪过去）
 - `src/floorMenu/`：楼层「⋯」里柏宝绘的几个按钮收成一个 🎧，点开竖排菜单（原按钮照常注入，只是藏起来）
 - `src/imageContext/`：图片浏览的大图下面、提示词上面显示这张图前面的几段正文，方便对照图和文字
+- `src/promptVersions/`：一张图用过的提示词（出过图的从图片记录里找，没出过图就被改掉的记在消息 extra 的 bbiPromptMemo），点「换回这版」把提示词写回正文，那版的图跟着回来
 - `src/viewportFit/`：插件主面板和大图（聊天里的和图片浏览里的）按手机实际可见屏幕摆位置和高度，地址栏伸缩后底下不露黑屏、顶上按钮不被状态栏挡
 - `src/naiQuota/`：NAI 官方订阅额度与 Anlas 显示、每张费用估算、「只用免费额度」开关（批量遇到会直接暂停）
-- `src/rewriteHint/`：AI 重写提示词时可以写额外要求；「挑正文里的一段」点选本楼段落只画那几段；楼层「⋯」里有「挑一段生图」按钮（可一次挑几组段落、每组一张，只调一次 AI；已有图的楼是「再加图」，新图插到所选段落后、原来的图不动）；楼层「重新生成 tag」可以不指定段落并定最多几张，或指定段落几组几张；按段落出的图会记下是哪几段（消息 extra 的 bbiPassageSources），再加图时标在那几段上；没写成时再打开会带上上次选的段落；有图的楼「⋯」里还有「一起改这层的图」，每张写修改要求、一次发给 AI 一起改；重写提示词时把每张图在正文里的位置一并报给 AI（slotPosition.ts），免得它自己推算
+- `src/rewriteHint/`：AI 重写提示词时可以写额外要求；「挑正文里的一段」点选本楼段落只画那几段；楼层「⋯」里有「挑一段生图」按钮（可一次挑几组段落、每组一张，只调一次 AI；已有图的楼是「再加图」，新图插到所选段落后、原来的图不动）；楼层「重新生成 tag」可以不指定段落并定最多几张，或指定段落几组几张；按段落出的图会记下是哪几段（消息 extra 的 bbiPassageSources），再加图时标在那几段上；没写成时再打开会带上上次选的段落；挑到一半可以点「保存」，下次打开接着选（pickDraft.ts，存在浏览器里、按段落原文找回）；有图的楼「⋯」里还有「一起改这层的图」，每张写修改要求、一次发给 AI 一起改；重写提示词时把每张图在正文里的位置一并报给 AI（slotPosition.ts），免得它自己推算
 - `src/autoTag/heavyPreset.ts`、`src/pages/settings/HeavyPresetPanel.vue`：解析失败时改用酒馆预设（重型自定义提示词），也可以设成一开始就直接用
 - `src/stream/`：副 API 流式实时输出（往上翻看时定住、可复制全文、能中断这次写 tag；显示全文、新内容只追加；楼层上的折叠区写完后留着，不分哪一楼只留最近两次）、无响应超时
 - `src/streamSafe/`：酒馆正在流式出字时，写完 tag 的楼层更新通知先排队，输出完再补发

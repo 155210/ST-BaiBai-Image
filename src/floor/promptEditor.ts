@@ -18,6 +18,7 @@ import {
   type ImageTagContent,
 } from '@/st/imageTagRegex';
 import { applyMessageText, type ApplyMessageResult } from '@/st/messageEdit';
+import { rememberPrompt } from '@/promptVersions/restore'; // fork:提示词历史
 
 /**
  * 命令式打开「编辑提示词」弹窗(供楼层卡片调用)。
@@ -133,6 +134,7 @@ async function writeBack(
       at.chatId,
       at.swipeId,
       message,
+      rememberPrompt(message, at.swipeId, at.seq, at.rawTag), // fork:记下改掉的提示词
     );
   } catch (error) {
     // 撤销标记:只取回自己这一枚,不能用 clearAutoGenerateForFloor(会连累同楼兄弟槽位)
