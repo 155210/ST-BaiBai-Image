@@ -1,4 +1,5 @@
 import { loadVibeData, saveVibeFiles } from '@/backends/vibeStore';
+import { exportDailyStats, importDailyStats } from '@/naiQuota/daily';
 import { globalCharTagLib, replaceGlobalCharTags } from '@/state/globalCharTags';
 import { replaceSettings, settings, type NaiVibeData } from '@/state/settings';
 import { PLUGIN_VERSION } from '@/version';
@@ -11,7 +12,8 @@ import { PLUGIN_VERSION } from '@/version';
  *
  * 文件里有:插件全部设置(出图渠道与接入点、正负面提示词、画师串、ComfyUI 工作流、
  * 副 API 渠道、自动 tag、排除名单、清洗标签、自定义提示词、界面设置)、全局角色库、
- * Vibe 参考图本身(它们在服务器上是单独的文件,不带上的话换了酒馆就只剩一个名字)。
+ * Vibe 参考图本身(它们在服务器上是单独的文件,不带上的话换了酒馆就只剩一个名字)、
+ * 每日出图计数(存在浏览器里的,导入时和本机已有的合并)。
  * 不包括:每个聊天自己的角色档案(跟着聊天文件走)、楼层里的图(在聊天和图库里)、
  * 画师串的预览图和悬浮球自定义图标(服务器上的图片文件)、批量页的范围等本机小设置。
  */
@@ -30,6 +32,8 @@ export interface SettingsBackup {
   globalCharacters: unknown[];
   /** vibe id → 正文。 */
   vibes: Record<string, NaiVibeData>;
+  /** 每日出图计数(naiQuota/daily.ts);旧文件没有 */
+  dailyGenStats?: unknown;
 }
 
 interface Keyed {
@@ -68,6 +72,7 @@ export async function buildBackup(withKeys: boolean): Promise<{ backup: Settings
       settings: copy,
       globalCharacters: JSON.parse(JSON.stringify(globalCharTagLib.entries)) as unknown[],
       vibes,
+      dailyGenStats: exportDailyStats(),
     },
     missingVibes,
   };
@@ -97,6 +102,7 @@ export function parseBackup(text: string): SettingsBackup {
     settings: backup.settings,
     globalCharacters: Array.isArray(backup.globalCharacters) ? backup.globalCharacters : [],
     vibes: backup.vibes && typeof backup.vibes === 'object' ? backup.vibes : {},
+    dailyGenStats: backup.dailyGenStats,
   };
 }
 
@@ -104,6 +110,8 @@ export interface ImportReport {
   characters: number;
   vibes: number;
   failedVibes: string[];
+  /** 文件里带了几天的出图计数 */
+  statDays: number;
 }
 
 /**
@@ -132,7 +140,8 @@ export async function applyBackup(backup: SettingsBackup): Promise<ImportReport>
 
   replaceSettings(next);
   const characters = replaceGlobalCharTags(backup.globalCharacters);
-  return { characters, vibes: restored, failedVibes };
+  const statDays = backup.dailyGenStats ? importDailyStats(backup.dailyGenStats) : 0;
+  return { characters, vibes: restored, failedVibes, statDays };
 }
 
 /** 文件里的 Key 是空的:按 id 用本机现有的那份补上。 */

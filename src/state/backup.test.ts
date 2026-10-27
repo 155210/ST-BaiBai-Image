@@ -9,6 +9,9 @@ describe('parseBackup', () => {
     expect(backup.globalCharacters).toEqual([]);
     expect(backup.vibes).toEqual({});
     expect(backup.withKeys).toBe(true);
+    expect(backup.dailyGenStats).toBeUndefined();
+    const withStats = parseBackup(JSON.stringify({ format: BACKUP_FORMAT, version: 1, settings: {}, dailyGenStats: { '2026-10-27': { total: 3 } } }));
+    expect(withStats.dailyGenStats).toEqual({ '2026-10-27': { total: 3 } });
   });
 
   it('rejects other files with a readable message', () => {

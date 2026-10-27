@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { NAI_OFFICIAL_URL, settings } from '@/state/settings';
 
-import { addGen, classifyGen, dailyState, dayKey, modelLabel, modelsIn, recentDays, statFor } from './daily';
+import { addGen, classifyGen, clearDailyStats, exportDailyStats, importDailyStats, dailyState, dayKey, modelLabel, modelsIn, recentDays, statFor } from './daily';
 import { parseSubscription, quotaState } from './quota';
 
 const OPUS = {
@@ -56,8 +56,29 @@ describe('每日出图张数', () => {
     expect(JSON.parse(stored['bbi-daily-gen-stats'])['2026-10-27'].models['nai:nai-diffusion-4-5-full'].total).toBe(1);
   });
 
-  it('只留最近 60 天', () => {
-    addGen({ backend: 'nai', model: 'nai-diffusion-5-full', free: null, anlas: 0 }, at(2026, 1, 1));
+  it('导出再导入:同一天取张数多的,不会翻倍;清空', () => {
+    const now = at(2026, 10, 27);
+    const g = { backend: 'nai' as const, model: 'nai-diffusion-5-full', free: true, anlas: 0 };
+    addGen(g, now);
+    addGen(g, now);
+    addGen(g, at(2026, 10, 25));
+    const file = exportDailyStats();
+    expect(importDailyStats(file, now)).toBe(2);
+    expect(recentDays(1, now)[0].total).toBe(2);
+    // 新设备上今天只出了 1 张、还有文件里没有的一天
+    clearDailyStats();
+    expect(Object.keys(dailyState.days)).toEqual([]);
+    expect(stored['bbi-daily-gen-stats']).toBe('{}');
+    addGen(g, now);
+    addGen(g, at(2026, 10, 26));
+    importDailyStats(file, now);
+    expect(recentDays(3, now).map(d => d.total)).toEqual([2, 1, 1]);
+    expect(recentDays(1, now)[0].models['nai:nai-diffusion-5-full'].total).toBe(2);
+    expect(importDailyStats('garbage', now)).toBe(0);
+  });
+
+  it('只留最近 400 天', () => {
+    addGen({ backend: 'nai', model: 'nai-diffusion-5-full', free: null, anlas: 0 }, at(2025, 1, 1));
     addGen({ backend: 'nai', model: 'nai-diffusion-5-full', free: null, anlas: 0 }, at(2026, 10, 27));
     expect(Object.keys(dailyState.days)).toEqual([dayKey(at(2026, 10, 27))]);
     // 时钟往回调了:比今天新的那天不删

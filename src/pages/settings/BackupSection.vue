@@ -53,6 +53,7 @@ async function onFile(event: Event): Promise<void> {
     text:
       `这个文件导出于 ${from || '未知时间'}。\n` +
       '导入后，柏宝绘现在的全部设置和全局角色库会被文件里的替换掉，不能撤销。' +
+      (backup.dailyGenStats ? '\n文件里的每日出图计数会和这台设备上的合并（同一天取张数多的）。' : '') +
       (backup.withKeys ? '' : '\n文件里没带 API Key，会保留这台设备上已经填好的 Key。'),
     confirmText: '导入',
     tone: 'danger',
@@ -62,7 +63,8 @@ async function onFile(event: Event): Promise<void> {
   try {
     const report = await applyBackup(backup);
     const failed = report.failedVibes.length ? `；${report.failedVibes.length} 个 Vibe 没能写回：${report.failedVibes.join('、')}` : '';
-    toastr.success(`已导入：全局角色 ${report.characters} 个，Vibe ${report.vibes} 个${failed}`, '柏宝绘', {
+    const stats = report.statDays ? `，出图计数 ${report.statDays} 天` : '';
+    toastr.success(`已导入：全局角色 ${report.characters} 个，Vibe ${report.vibes} 个${stats}${failed}`, '柏宝绘', {
       timeOut: failed ? 0 : 6000,
     });
   } catch (error) {
@@ -80,7 +82,7 @@ async function onFile(event: Event): Promise<void> {
       同一个酒馆换设备打开本来就会自动同步，不用导。
     </p>
     <p class="bbi-field-hint">
-      会带上：出图渠道和接入点、正负面提示词、画师串、ComfyUI 工作流、Vibe 参考图、副 API、自动 tag、排除名单、清洗标签、自定义提示词、界面设置、全局角色库。
+      会带上：出图渠道和接入点、正负面提示词、画师串、ComfyUI 工作流、Vibe 参考图、副 API、自动 tag、排除名单、清洗标签、自定义提示词、界面设置、全局角色库、每日出图计数。
       不会带上：每个聊天自己的角色档案（跟着聊天走）、已经出的图、画师串预览图、悬浮球自定义图标。
     </p>
 
