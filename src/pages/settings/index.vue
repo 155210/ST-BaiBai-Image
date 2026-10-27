@@ -6,6 +6,7 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import Icon from '@/components/Icon.vue';
 import ModalMask from '@/components/ModalMask.vue';
 import HeavyPresetPanel from '@/pages/settings/HeavyPresetPanel.vue';
+import TagDictPanel from '@/tagDict/TagDictPanel.vue'; // fork:标签库
 import { fetchModels, testChannel } from '@/api/client';
 import {
   BACKENDS,
@@ -870,6 +871,10 @@ async function confirmUpdate() {
 
       <Collapsible title="重型自定义提示词" :open="false">
         <HeavyPresetPanel />
+      </Collapsible>
+
+      <Collapsible title="标签库" :open="false">
+        <TagDictPanel />
       </Collapsible>
 
       <BackupSection />
