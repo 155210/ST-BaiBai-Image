@@ -29,6 +29,7 @@ import { generateNaiImage, naiRandomSeed, naiSupportsCharacterPrompts } from '@/
 import { effectiveOrientation, parseSize, pickSize, type Orientation } from '@/backends/size';
 import { acquireNaiSlot } from '@/floor/genQueue';
 import type { GenerationMeta } from '@/generationMeta';
+import { recordDailyGen } from '@/naiQuota/daily';
 import { activeComfyPreset, activeNaiEndpoint, activeOrientationLock, effectiveComfyConn, effectiveNai, settings, type BackendId } from '@/state/settings';
 
 /** 一次生成的输入。与协议层 ImageInsertion 同形,但不含正文位置信息。 */
@@ -250,6 +251,7 @@ export async function generateImage(
 
     // 退避文案到此为止:图已拿到,落盘还要一会儿,不该继续显示「稍后重试」
     progress.onRetry?.(null);
+    recordDailyGen(meta); // fork:每日出图张数
     return { result, seed: input.seed, size, backend: status.backend, charactersApplied, meta };
   } finally {
     release?.();

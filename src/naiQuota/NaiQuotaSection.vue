@@ -4,11 +4,13 @@ import { computed, onMounted, watch } from 'vue';
 import Collapsible from '@/components/Collapsible.vue';
 import { activeNaiEndpoint, effectiveNai, settings } from '@/state/settings';
 
-import { batteryEmptyFor, describeBattery, describeFreeLimits, estimateBoth, isNaiV5, isOfficialUrl, quotaState, refreshNaiQuota } from './quota';
+import DailyGenStats from './DailyGenStats.vue';
+import { batteryEmptyFor, describeBatteryLeft, describeBatteryRefill, describeFreeLimits, estimateBoth, isNaiV5, isOfficialUrl, quotaState, refreshNaiQuota } from './quota';
 
 /**
  * NAI 页「官方额度与 Anlas」(本 fork 独有):订阅档位、Anlas 余额、
- * 按当前尺寸与步数每张免费还是扣多少,以及「只用免费额度」开关。
+ * Opus 免费额度剩多少、每天回多少,按当前尺寸与步数每张免费还是扣多少,
+ * 「只用免费额度」开关,以及每天出了几张图。
  */
 
 const official = computed(() => isOfficialUrl(activeNaiEndpoint().url));
@@ -24,6 +26,12 @@ const estimates = computed(() =>
       })
     : [],
 );
+const anlasSplit = computed(() => {
+  const q = quota.value;
+  if (!q || q.anlasFixed === null || q.anlasPurchased === null || q.anlasPurchased <= 0) return '';
+  return `订阅送的 ${q.anlasFixed.toLocaleString()} + 买的 ${q.anlasPurchased.toLocaleString()}`;
+});
+const refill = computed(() => (quota.value?.battery ? describeBatteryRefill(quota.value.battery) : ''));
 const batteryOut = computed(() => !!quota.value && batteryEmptyFor(quota.value, settings.nai.model));
 
 function formatDate(ms: number | null): string {
@@ -61,10 +69,11 @@ watch(() => [activeNaiEndpoint().id, activeNaiEndpoint().key], refresh);
               <template v-else-if="quota.expiresAt">（到 {{ formatDate(quota.expiresAt) }}）</template>
             </span>
             <span class="nq-stat">
-              Anlas：<b>{{ quota.anlas === null ? '查不到' : quota.anlas.toLocaleString() }}</b>
+              Anlas 余额：<b>{{ quota.anlas === null ? '查不到' : quota.anlas.toLocaleString() }}</b>
+              <template v-if="anlasSplit">（{{ anlasSplit }}）</template>
             </span>
             <span v-if="quota.battery" class="nq-stat" :class="{ 'nq-error': quota.battery.empty }">
-              V5 免费电量：<b>{{ describeBattery(quota.battery) }}</b>
+              Opus 免费额度：<b>{{ describeBatteryLeft(quota.battery) }}</b>
             </span>
           </template>
           <span v-else-if="quotaState.loading" class="nq-stat">查询中…</span>
@@ -74,21 +83,23 @@ watch(() => [activeNaiEndpoint().id, activeNaiEndpoint().key], refresh);
       </div>
 
       <template v-if="quota">
-        <p class="bbi-field-hint">
-          免费出图范围：{{ quota.freeLimits.length ? describeFreeLimits(quota) + '，一次 1 张' : '没有（只有 Opus 订阅有免费出图）' }}
-        </p>
         <div v-if="quota.battery" class="nq-bar" :title="`${Math.round(quota.battery.percent)}%`">
           <div class="nq-bar-fill" :style="{ width: `${quota.battery.percent}%` }"></div>
         </div>
+        <p v-if="refill" class="nq-refill">{{ refill }}</p>
+        <p class="bbi-field-hint">
+          免费出图范围：{{ quota.freeLimits.length ? describeFreeLimits(quota) + '，一次 1 张' : '没有（只有 Opus 订阅有免费出图）' }}
+        </p>
         <p v-if="quota.battery" class="bbi-field-hint">
-          Opus 出 V5 不扣 Anlas，但会耗这个电量（官方「利用上限」），会随时间自动回复；用完后再出 V5 就照常扣 Anlas。
-          <template v-if="!isNaiV5(settings.nai.model)">当前模型不是 V5，不耗电量。</template>
+          Opus 出 V5 不扣 Anlas，但会耗这个额度（官方「利用上限」），会随时间自动回复；用完后再出 V5 就照常扣 Anlas。
+          张数按官网口径估（1% 约 17 张，1024×1024 以内、28 步以内）。
+          <template v-if="!isNaiV5(settings.nai.model)">当前模型不是 V5，不耗这个额度。</template>
         </p>
         <ul class="nq-est">
           <li v-for="e in estimates" :key="e.label" :class="{ 'is-paid': !e.free }">
             {{ e.label }} {{ e.width }}×{{ e.height }}、{{ e.steps }} 步：
             <b>{{ e.free ? '免费' : `每张约 ${e.cost} Anlas` }}</b>
-            <template v-if="!e.free && batteryOut">（电量用完）</template>
+            <template v-if="!e.free && batteryOut">（免费额度用完）</template>
           </li>
         </ul>
       </template>
@@ -102,6 +113,8 @@ watch(() => [activeNaiEndpoint().id, activeNaiEndpoint().key], refresh);
       开了之后，走官方接入点时会扣 Anlas 的图一律不出（卡片上会写原因），批量出图也会在第一张停下；
       查不到订阅状态时同样不出，免得误扣。第三方接入点不受影响。估算不含 Vibe 编码等额外费用。
     </p>
+
+    <DailyGenStats />
   </Collapsible>
 </template>
 
@@ -136,6 +149,11 @@ watch(() => [activeNaiEndpoint().id, activeNaiEndpoint().key], refresh);
 .nq-bar-fill {
   height: 100%;
   background: var(--bbi-accent, #d9a441);
+}
+
+.nq-refill {
+  margin: 2px 0 0;
+  font-size: 13px;
 }
 
 .nq-est {

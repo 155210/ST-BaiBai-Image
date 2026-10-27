@@ -129,6 +129,8 @@
 | src/backends/nai.ts | await assertNaiFreeAllowed(nai, params); | 会扣 Anlas 的图在发请求前拦下 | 官方额度与 Anlas |
 | src/pages/backend/panels/NaiPanel.vue | import NaiQuotaSection from '@/naiQuota/NaiQuotaSection.vue'; | NAI 页引入额度区块 | 官方额度与 Anlas |
 | src/pages/backend/panels/NaiPanel.vue | <NaiQuotaSection /> | NAI 页显示订阅、Anlas、每张费用和开关 | 官方额度与 Anlas |
+| src/generate.ts | import { recordDailyGen } from '@/naiQuota/daily'; | 引入每日出图张数 | 每日出图统计 |
+| src/generate.ts | recordDailyGen(meta); // fork:每日出图张数 | 每出成一张记一笔（NAI 官方顺便重查额度） | 每日出图统计 |
 | src/st/messageEdit.ts | import { deferWhileGenerating } from '@/streamSafe/deferWhileGenerating'; | 引入「出字时推迟通知」 | 流式卡住 |
 | src/st/messageEdit.ts | // fork:流式输出期间推迟通知 | 写完 tag 时酒馆正在出字：事件等输出完再发，免得别的插件重绘聊天把流式卡住 | 流式卡住 |
 | src/st/messageEdit.ts | // fork:流式输出期间不整段重载 | 同上：本楼刷新失败时也不在出字途中整段重载聊天 | 流式卡住 |
@@ -181,7 +183,7 @@
 - `src/promptVersions/`：一张图用过的提示词（出过图的从图片记录里找，没出过图就被改掉的记在消息 extra 的 bbiPromptMemo），点「换回这版」把提示词写回正文，那版的图跟着回来
 - `src/promptOnlyEdit/`：编辑提示词里的「只改提示词（不发正文）」，只把现在的提示词和要求发给 AI，改好填进输入框，用户自己点应用
 - `src/viewportFit/`：插件主面板和大图（聊天里的和图片浏览里的）按手机实际可见屏幕摆位置和高度，地址栏伸缩后底下不露黑屏、顶上按钮不被状态栏挡
-- `src/naiQuota/`：NAI 官方订阅额度与 Anlas 显示、每张费用估算、「只用免费额度」开关（批量遇到会直接暂停）
+- `src/naiQuota/`：NAI 官方订阅额度与 Anlas 显示（Anlas 分订阅送的 / 买的，Opus 免费额度剩几 % 约几张、每天回几 % 约几张、几天回满）、每张费用估算、「只用免费额度」开关（批量遇到会直接暂停）、每日出图张数（daily.ts，按模型分开、能选模型看，存在浏览器里、只记本机、留 60 天）
 - `src/rewriteHint/`：AI 重写提示词时可以写额外要求；「挑正文里的一段」点选本楼段落只画那几段；楼层「⋯」里有「挑一段生图」按钮（可一次挑几组段落、每组一张，只调一次 AI；已有图的楼是「再加图」，新图插到所选段落后、原来的图不动）；楼层「重新生成 tag」可以不指定段落并定最多几张，或指定段落几组几张；按段落出的图会记下是哪几段（消息 extra 的 bbiPassageSources），再加图时标在那几段上；没写成时再打开会带上上次选的段落；选了没生成就自动存着，下次打开接着选，点「清空」才清掉（pickDraft.ts，存在浏览器里、按段落原文找回）；有图的楼「⋯」里还有「一起改这层的图」，每张写修改要求、一次发给 AI 一起改；重写提示词时把每张图在正文里的位置一并报给 AI（slotPosition.ts），免得它自己推算
 - `src/autoTag/heavyPreset.ts`、`src/pages/settings/HeavyPresetPanel.vue`：解析失败时改用酒馆预设（重型自定义提示词），也可以设成一开始就直接用
 - `src/stream/`：副 API 流式实时输出（往上翻看时定住、可复制全文、能中断这次写 tag；显示全文、新内容只追加；楼层上的折叠区写完后留着，不分哪一楼只留最近两次）、无响应超时
