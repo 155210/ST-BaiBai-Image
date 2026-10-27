@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import BbiTextarea from '@/components/BbiTextarea.vue';
+import TagSuggestArea from '@/tagDict/TagSuggestArea.vue'; // fork:标签联想
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import Icon from '@/components/Icon.vue';
 import ModalMask from '@/components/ModalMask.vue';
@@ -508,9 +509,9 @@ function sourceLabel(entry: CharTagEntry): string {
               :class="{ 'is-wide': f === 'outfit' }"
             >
               <span class="bbi-char-form-label">{{ CHAR_TAG_FIELD_LABELS[f] }}</span>
-              <input
+              <TagSuggestArea
                 v-model="draft.fields[f]"
-                class="bbi-input"
+                single
                 :placeholder="FIELD_PLACEHOLDERS[f]"
                 @input="markManual"
               />
@@ -521,7 +522,7 @@ function sourceLabel(entry: CharTagEntry): string {
 
         <label class="bbi-modal-field">
           <span class="bbi-modal-label">整串模式(可选)</span>
-          <BbiTextarea
+          <TagSuggestArea
             v-model="draft.raw"
             :rows="2"
             :max-rows="6"

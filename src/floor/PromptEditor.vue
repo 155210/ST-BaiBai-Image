@@ -381,10 +381,10 @@ onBeforeUnmount(() => {
             type="text"
             placeholder="角色名"
           />
-          <input
+          <TagSuggestArea
             v-model="character.tag"
-            class="bbi-input bbi-char-tag"
-            type="text"
+            class="bbi-char-tag"
+            single
             placeholder="tag(如 girl, black hair)"
           />
           <input
