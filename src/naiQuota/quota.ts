@@ -32,6 +32,9 @@ export interface NaiQuota {
   expiresAt: number | null;
   /** Anlas 余额(订阅送的 + 自己买的);查不到返回 null */
   anlas: number | null;
+  /** 其中订阅每月送的、自己买的;接口只给了总数时为 null */
+  anlasFixed: number | null;
+  anlasPurchased: number | null;
   /** 免费出图范围;空数组 = 没有免费额度 */
   freeLimits: NaiFreeLimit[];
   /** V5 的「利用上限」电量;接口没给返回 null */
@@ -79,10 +82,13 @@ export function parseSubscription(data: unknown, now = Date.now()): NaiQuota {
   } else if (active && tier === 3 && perks.unlimitedImageGeneration === undefined) {
     freeLimits = OPUS_FALLBACK;
   }
-  const steps = (sub.trainingStepsLeft ?? o.trainingStepsLeft) as Record<string, any> | undefined;
-  const fixed = num(steps?.fixedTrainingStepsLeft);
-  const bought = num(steps?.purchasedTrainingSteps);
-  const anlas = fixed === null && bought === null ? null : (fixed ?? 0) + (bought ?? 0);
+  const rawSteps = sub.trainingStepsLeft ?? o.trainingStepsLeft;
+  // 有的返回直接给一个总数
+  const steps = (rawSteps && typeof rawSteps === 'object' ? rawSteps : {}) as Record<string, any>;
+  const fixed = num(steps.fixedTrainingStepsLeft);
+  const bought = num(steps.purchasedTrainingSteps);
+  const total = typeof rawSteps === 'number' ? num(rawSteps) : null;
+  const anlas = total ?? (fixed === null && bought === null ? null : (fixed ?? 0) + (bought ?? 0));
   const expires = num(sub.expiresAt);
   const usage = (o.usage ?? sub.usage) as Record<string, any> | undefined;
   const percent = num(usage?.percent);
@@ -101,6 +107,8 @@ export function parseSubscription(data: unknown, now = Date.now()): NaiQuota {
     // 官方给的是秒
     expiresAt: expires && expires > 0 ? (expires < 1e12 ? expires * 1000 : expires) : null,
     anlas,
+    anlasFixed: total === null ? fixed : null,
+    anlasPurchased: total === null ? bought : null,
     freeLimits,
     battery,
     fetchedAt: now,
@@ -267,14 +275,40 @@ export async function assertNaiFreeAllowed(
   );
 }
 
-/** 「剩 45%，每天约回 11%」;回复速度按「再回 1% 要多久」折算。 */
-export function describeBattery(battery: NaiBattery): string {
-  const head = battery.empty ? '已用完，再出 V5 会扣 Anlas' : `剩 ${Math.round(battery.percent)}%`;
+/** 电量 1% 大约够出几张 V5(官网口径:1% ≈ 17.3 张,按 1024×1024 以内、28 步以内算)。 */
+export const IMAGES_PER_PERCENT = 17.3;
+
+export function batteryImages(percent: number): number {
+  return Math.round(IMAGES_PER_PERCENT * Math.max(0, percent));
+}
+
+/** 每天回多少 %(按「再回 1% 要多久」折算,保留一位小数);没给返回 null。 */
+export function batteryPerDay(battery: NaiBattery): number | null {
   const t = battery.secondsToNext;
-  if (battery.percent >= 100 || !t || t <= 0) return head;
-  const perDay = 86400 / t;
-  const rate = perDay >= 1 ? `每天约回 ${Math.round(perDay)}%` : `约 ${Math.ceil(t / 3600)} 小时回 1%`;
-  return `${head}，${rate}`;
+  if (!t || t <= 0) return null;
+  return Math.round((86400 / t) * 10) / 10;
+}
+
+/** 「剩 32%（约 554 张）」 */
+export function describeBatteryLeft(battery: NaiBattery): string {
+  if (battery.empty) return '已用完，再出 V5 会扣 Anlas';
+  return `剩 ${Math.round(battery.percent)}%（约 ${batteryImages(battery.percent)} 张）`;
+}
+
+/** 「每天回 11%（约 190 张），约 6 天回满」;满了或接口没给速度返回空串。 */
+export function describeBatteryRefill(battery: NaiBattery): string {
+  const perDay = batteryPerDay(battery);
+  if (battery.percent >= 100 || perDay === null) return '';
+  const rate = perDay >= 1 ? `每天回 ${perDay}%（约 ${batteryImages(perDay)} 张）` : `约 ${Math.ceil((battery.secondsToNext ?? 0) / 3600)} 小时回 1%`;
+  const days = (100 - Math.max(0, battery.percent)) / perDay;
+  const full = days < 1 ? `约 ${Math.max(1, Math.ceil(days * 24))} 小时回满` : `约 ${Math.ceil(days)} 天回满`;
+  return `${rate}，${full}`;
+}
+
+/** 「剩 32%（约 554 张），每天回 11%（约 190 张），约 7 天回满」 */
+export function describeBattery(battery: NaiBattery): string {
+  const refill = describeBatteryRefill(battery);
+  return refill ? `${describeBatteryLeft(battery)}，${refill}` : describeBatteryLeft(battery);
 }
 
 export function describeFreeLimits(quota: NaiQuota): string {

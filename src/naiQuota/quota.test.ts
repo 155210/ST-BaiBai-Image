@@ -25,7 +25,14 @@ describe('parseSubscription', () => {
     expect(q.tierName).toBe('Opus');
     expect(q.expiresAt).toBe(1798761600000);
     expect(q.anlas).toBe(10300);
+    expect([q.anlasFixed, q.anlasPurchased]).toEqual([9800, 500]);
     expect(q.freeLimits).toEqual([{ resolution: 1048576, maxPrompts: 1 }]);
+  });
+
+  it('trainingStepsLeft 直接给总数也认', () => {
+    const q = parseSubscription({ ...OPUS, trainingStepsLeft: 8749 });
+    expect(q.anlas).toBe(8749);
+    expect([q.anlasFixed, q.anlasPurchased]).toEqual([null, null]);
   });
 
   it('Scroll 没有免费出图', () => {
@@ -106,7 +113,11 @@ describe('V5 电量', () => {
   it('解析 usage:剩余百分比、是否用完、回复速度', () => {
     const q = withBattery(45);
     expect(q.battery).toEqual({ percent: 45, empty: false, secondsToNext: 7888 });
-    expect(describeBattery(q.battery!)).toBe('剩 45%，每天约回 11%');
+    expect(describeBattery(q.battery!)).toBe('剩 45%（约 779 张），每天回 11%（约 190 张），约 5 天回满');
+    // 和 NovelAI App 上的读数对得上:剩 32% ≈ 554 张
+    expect(describeBattery(withBattery(32).battery!)).toBe('剩 32%（约 554 张），每天回 11%（约 190 张），约 7 天回满');
+    expect(describeBattery(withBattery(100).battery!)).toBe('剩 100%（约 1730 张）');
+    expect(describeBattery(withBattery(95).battery!)).toBe('剩 95%（约 1644 张），每天回 11%（约 190 张），约 11 小时回满');
     expect(parseSubscription(OPUS).battery).toBeNull();
     expect(withBattery(3, { isNegative: true }).battery?.empty).toBe(true);
   });

@@ -3,7 +3,8 @@ import { computed, onMounted } from 'vue';
 
 import { activeNaiEndpoint, effectiveNai, settings } from '@/state/settings';
 
-import { estimateBoth, isNaiV5, isOfficialUrl, quotaState, refreshNaiQuota } from './quota';
+import { recentDays } from './daily';
+import { batteryImages, estimateBoth, isNaiV5, isOfficialUrl, quotaState, refreshNaiQuota } from './quota';
 
 /** 批量页出图前的一行提示:NAI 官方每张免费还是扣 Anlas、余额多少(本 fork 独有)。 */
 
@@ -19,8 +20,9 @@ const text = computed(() => {
     model: settings.nai.model,
   }).map(e => `${e.label}${e.free ? '免费' : `每张约 ${e.cost} Anlas`}`);
   const anlas = q.anlas === null ? '' : ` · Anlas ${q.anlas.toLocaleString()}`;
-  const battery = q.battery && isNaiV5(settings.nai.model) ? ` · V5 电量 ${q.battery.empty ? '已用完' : `${Math.round(q.battery.percent)}%`}` : '';
-  return `NAI 官方 ${q.tierName}${anlas}${battery} · ${parts.join('、')}`;
+  const battery = q.battery && isNaiV5(settings.nai.model) ? ` · Opus 免费额度 ${q.battery.empty ? '已用完' : `${Math.round(q.battery.percent)}%（约 ${batteryImages(q.battery.percent)} 张）`}` : '';
+  const today = recentDays(1)[0].total;
+  return `NAI 官方 ${q.tierName}${anlas}${battery} · ${parts.join('、')}${today ? ` · 今天已出 ${today} 张` : ''}`;
 });
 const paid = computed(() => {
   const q = quota.value;
