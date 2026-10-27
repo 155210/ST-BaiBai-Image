@@ -22,6 +22,7 @@ import {
   normalizeHeavyPreset,
   type HeavyPresetSettings,
 } from '@/autoTag/heavyPreset';
+import { normalizeTagDict, tagDictDefaults, type TagDictSettings } from '@/tagDict/settings';
 import { getContext } from '@/st/context';
 import { reactive, watch } from 'vue';
 
@@ -472,6 +473,8 @@ export interface AutoTagSettings {
   prompts: AutoTagPrompts;
   /** 重型自定义提示词(导入的酒馆预设):默认提示词解析失败后,剩余重试改用它(见 autoTag/heavyPreset.ts)。 */
   heavyPreset: HeavyPresetSettings;
+  /** fork:标签库(中文找英文 tag、纠正写法、输入联想)的开关,见 tagDict/。 */
+  tagDict: TagDictSettings;
 }
 
 /**
@@ -1215,6 +1218,7 @@ function defaults(): ImageSettings {
         naiV5Thinking: '',
       },
       heavyPreset: heavyPresetDefaults(),
+      tagDict: tagDictDefaults(), // fork:标签库
     },
     excludes: excludesDefaults(),
     storage: { saveAsJpeg: true },
@@ -1830,6 +1834,7 @@ function normalize(raw: unknown): ImageSettings {
       };
     })(),
     heavyPreset: normalizeHeavyPreset(rt.heavyPreset),
+    tagDict: normalizeTagDict(rt.tagDict), // fork:标签库
   };
   merged.excludes = normalizeExcludes(r.excludes);
   // 存储行为:嵌套对象逐字段兜底(老数据无 storage 键 → 默认关)
