@@ -19,6 +19,7 @@ import { parseFloorRange } from '@/batch/range';
 import { batchRange, galleryRange } from '@/batch/rangeStore';
 import type { BbiImageEntry } from '@/floor/storage';
 import { getContext } from '@/st/context';
+import { currentModel, modelOptions, setModel } from '@/state/modelSwitch';
 import GalleryItem from './GalleryItem.vue';
 import RangeField from './RangeField.vue';
 
@@ -29,6 +30,10 @@ import RangeField from './RangeField.vue';
 
 const props = defineProps<{ chatTick: number; lastFloor: number }>();
 const emit = defineEmits<{ goRun: [] }>();
+
+/** fork:出图模型,和「渠道」页读写同一份设置,两边改哪边都同步。 */
+const models = computed(modelOptions);
+const model = computed<string>({ get: currentModel, set: setModel });
 
 const PREFS_KEY = 'bbi_batch_gallery_prefs';
 const FILTERS: { value: GalleryFilter; label: string }[] = [
@@ -243,6 +248,10 @@ onUnmounted(() => {
         </button>
       </template>
     </RangeField>
+    <div v-if="models.length" class="bbi-gmodel">
+      <span class="bbi-field-label">出图模型</span>
+      <BbiSelect v-model="model" :options="models" class="bbi-gmodel-select" aria-label="出图模型" />
+    </div>
     <div class="bbi-gtools">
       <BbiSelect v-model="prefs.filter" :options="FILTERS" class="bbi-gfilter" />
       <button class="bbi-btn bbi-btn-sm" type="button" :disabled="loading" @click="load">刷新列表</button>
@@ -322,6 +331,18 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.bbi-gmodel {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.bbi-gmodel .bbi-field-label {
+  flex: none;
+}
+.bbi-gmodel-select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
 .bbi-gtools {
   display: flex;
   flex-wrap: wrap;
