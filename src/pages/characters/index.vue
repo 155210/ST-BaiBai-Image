@@ -6,6 +6,8 @@ import Icon from '@/components/Icon.vue';
 import ModalMask from '@/components/ModalMask.vue';
 import { generateCharTags } from '@/autoTag/charAnchors';
 import { readBookMemory } from '@/autoTag/bookMemory';
+import CharCopyPaste from '@/charCopy/CharCopyPaste.vue'; // fork:外貌复制回填
+import type { CharCopyKey } from '@/charCopy/format'; // fork:外貌复制回填
 import {
   CHAR_TAG_FIELDS,
   CHAR_TAG_FIELD_LABELS,
@@ -214,6 +216,18 @@ function confirmEntry() {
       ? upsertGlobalCharTag(entryData, editingName.value ?? undefined)
       : upsertCharTag(entryData, editingName.value ?? undefined, { recordChanges: true });
   if (ok) closeEntry();
+}
+
+/** fork:外貌复制回填 —— 粘贴回来的栏目填进草稿,没写到的不动 */
+function applyPasted(values: Partial<Record<CharCopyKey, string>>) {
+  const d = draft.value;
+  if (!d) return;
+  for (const [key, value] of Object.entries(values) as [CharCopyKey, string][]) {
+    if (key === 'raw') d.raw = value;
+    else if (key === 'nl') d.nl = value;
+    else d.fields[key] = value;
+  }
+  markManual();
 }
 
 /* —— 删除:二次确认 —— */
@@ -543,6 +557,8 @@ function sourceLabel(entry: CharTagEntry): string {
             @input="markManual"
           />
         </label>
+
+        <CharCopyPaste :source="draft" @apply="applyPasted" />
 
         <div class="bbi-char-preview">
           <span class="bbi-field-label">最终 tag 预览</span>

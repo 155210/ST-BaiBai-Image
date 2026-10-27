@@ -58,6 +58,8 @@
 | src/state/charTags.ts | import { splitBust, withSplitBust } from '@/charBust/split'; | 旧角色「体型」里的胸部词读出来时挪到「胸部」 | 角色库罩杯 |
 | src/state/charTags.ts | return splitBust(fields); | 同上：读库时 | 角色库罩杯 |
 | src/state/charTags.ts | return entries.map(withSplitBust); | 同上：AI 改过体型之后 | 角色库罩杯 |
+| src/pages/characters/index.vue | import CharCopyPaste from '@/charCopy/CharCopyPaste.vue'; | 编辑角色里「复制外貌 / 粘贴回填」 | 外貌复制回填 |
+| src/pages/characters/index.vue | <CharCopyPaste :source="draft" @apply="applyPasted" /> | 同上：按钮放在自然语言外貌下面 | 外貌复制回填 |
 | src/autoTag/prompt.ts | 库中没标 [locked] 的女性角色「胸部」一栏为空时 | 同上：胸部还空着的旧角色让 AI 出场时补上 | 角色库罩杯 |
 | src/floor/PromptEditor.vue | import RewriteHintBox from '@/rewriteHint/RewriteHintBox.vue'; | 引入重写要求输入框 | #6 |
 | src/floor/PromptEditor.vue | const rewriteHint = ref(''); | 重写要求的状态 | #6 |
@@ -185,6 +187,7 @@
 - `src/state/backup.ts`、`src/pages/settings/BackupSection.vue`：导出 / 导入设置（含每日出图计数）
 - `src/lightboxNav/`、`src/batch/galleryLightbox.ts`、`src/pages/batch/EmptySlotView.vue`：图片浏览大图左右切换
 - `src/charBust/`：角色库「胸部」一栏的旧数据迁移（体型里的胸部词挪过去）
+- `src/charCopy/`：编辑角色里「复制外貌」（tag 各栏和自然语言外貌按「【栏目】内容」复制，带给识图 AI 的说明）和「粘贴回填」（AI 改过格式也认：加粗、冒号、列表、表格、代码块、「原来 → 现在」；没写到的栏不动，写「无」的清空）
 - `src/floorMenu/`：楼层「⋯」里柏宝绘的几个按钮收成一个 🎧，点开竖排菜单（原按钮照常注入，只是藏起来）
 - `src/imageContext/`：图片浏览的大图下面、提示词上面显示这张图前面的几段正文，方便对照图和文字
 - `src/promptVersions/`：一张图用过的提示词（出过图的从图片记录里找，没出过图就被改掉的记在消息 extra 的 bbiPromptMemo），点「换回这版」把提示词写回正文，那版的图跟着回来
