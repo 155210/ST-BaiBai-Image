@@ -9,12 +9,12 @@ import { anlasCost, isFreeGen, isOfficialUrl, quotaState, refreshNaiQuota } from
  * 每天出了几张图(本 fork 独有)。每出成一张记一笔,按本机日期分天、按模型分开,NAI 官方的
  * 再分免费 / 扣 Anlas(按出图那一刻查到的订阅估,扣的 Anlas 也是估算)。
  *
- * 存在浏览器 localStorage 里,只记这台设备;不进设置,导出 / 导入设置不带它。
+ * 存在浏览器 localStorage 里,只记这台设备;导出 / 导入设置时随文件带走(见 state/backup.ts)。
  */
 
 const STORAGE_KEY = 'bbi-daily-gen-stats';
-/** 只留最近这么多天 */
-const KEEP_DAYS = 60;
+/** 只留最近这么多天(一天一行,一年多也就几十 KB) */
+export const KEEP_DAYS = 400;
 
 /** 某一天里某个模型出的图 */
 export interface ModelStat {
@@ -80,9 +80,9 @@ function count(value: unknown): number {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
 }
 
-function load(): Record<string, DayStat> {
+/** 读一份按天的记录(本机存的或导入文件里的),不认识的字段丢掉。 */
+export function normalizeDays(raw: unknown): Record<string, DayStat> {
   try {
-    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
     const out: Record<string, DayStat> = {};
     for (const [date, v] of Object.entries(raw as Record<string, any>)) {
@@ -96,6 +96,14 @@ function load(): Record<string, DayStat> {
       out[date] = { date, total: count(v.total), nai: count(v.nai), comfy: count(v.comfy), free: count(v.free), paid: count(v.paid), anlas: count(v.anlas), models };
     }
     return out;
+  } catch {
+    return {};
+  }
+}
+
+function load(): Record<string, DayStat> {
+  try {
+    return normalizeDays(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}'));
   } catch {
     return {};
   }
@@ -165,9 +173,39 @@ export function addGen(kind: GenKind, now = Date.now()): void {
       stat.anlas += kind.anlas;
     }
   }
-  // 只删太旧的:本机时钟往回调过时,比「今天」新的那几天照样留着
+  prune(now);
+  store(dailyState.days);
+}
+
+/** 只删太旧的:本机时钟往回调过时,比「今天」新的那几天照样留着。 */
+function prune(now: number): void {
   const oldest = recentDays(KEEP_DAYS, now)[KEEP_DAYS - 1].date;
   for (const key of Object.keys(dailyState.days)) if (key < oldest) delete dailyState.days[key];
+}
+
+/** 导出设置时带上的那份(深拷贝)。 */
+export function exportDailyStats(): Record<string, DayStat> {
+  return JSON.parse(JSON.stringify(dailyState.days)) as Record<string, DayStat>;
+}
+
+/**
+ * 导入设置时并进来:同一天两边都有就留张数多的那份(同一台设备导出再导回来不会翻倍),
+ * 只有一边有的照收。返回文件里带了几天。
+ */
+export function importDailyStats(raw: unknown, now = Date.now()): number {
+  const incoming = normalizeDays(raw);
+  for (const [date, day] of Object.entries(incoming)) {
+    const mine = dailyState.days[date];
+    if (!mine || day.total > mine.total) dailyState.days[date] = day;
+  }
+  prune(now);
+  store(dailyState.days);
+  return Object.keys(incoming).length;
+}
+
+/** 清空全部出图计数。 */
+export function clearDailyStats(): void {
+  for (const key of Object.keys(dailyState.days)) delete dailyState.days[key];
   store(dailyState.days);
 }
 
