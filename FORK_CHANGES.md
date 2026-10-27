@@ -152,6 +152,15 @@
 | src/floor/PromptEditor.vue | import PromptOnlyEdit from '@/promptOnlyEdit/PromptOnlyEdit.vue'; | 编辑提示词里的「只改提示词（不发正文）」 | 只改提示词 |
 | src/floor/PromptEditor.vue | @result="fillDraft" | 同上：结果填进输入框 | 只改提示词 |
 | src/floor/PromptEditor.vue | function fillDraft(next: ImageTagContent) | 同上 | 只改提示词 |
+| src/autoTag/runner.ts | import { fixPlanWithDict, tagHintFor, withTagHint } from '@/tagDict/autoTag'; | 引入标签库 | 标签库 |
+| src/autoTag/runner.ts | // fork:标签库参考 | 写 tag 前把正文里认识的中文词「中文=英文」附给 AI | 标签库 |
+| src/autoTag/runner.ts | const builtMessages = await buildAutoTagMessages( | 同上：先拼好消息再接参考 | 标签库 |
+| src/autoTag/runner.ts | // fork:标签库纠正写法 | AI 写完后对照标签库纠正 tag 写法 | 标签库 |
+| src/state/settings.ts | tagDict: TagDictSettings; | 标签库三个开关的设置字段 | 标签库 |
+| src/state/settings.ts | tagDict: tagDictDefaults(), // fork:标签库 | 同上：默认全开 | 标签库 |
+| src/state/settings.ts | tagDict: normalizeTagDict(rt.tagDict), // fork:标签库 | 同上：读设置 | 标签库 |
+| src/pages/settings/index.vue | <TagDictPanel /> | 设置页「标签库」开关 | 标签库 |
+| src/floor/PromptEditor.vue | import TagSuggestArea from '@/tagDict/TagSuggestArea.vue'; | 编辑提示词的画面 tag、负面提示词输入框带标签联想 | 标签库 |
 
 ## 其他本分支改动（不在原作者文件里，或合并时一定会冲突、手动处理）
 
@@ -177,6 +186,7 @@
 - `src/autoTag/heavyPreset.ts`、`src/pages/settings/HeavyPresetPanel.vue`：解析失败时改用酒馆预设（重型自定义提示词），也可以设成一开始就直接用
 - `src/stream/`：副 API 流式实时输出（往上翻看时定住、可复制全文、能中断这次写 tag；显示全文、新内容只追加；楼层上的折叠区写完后留着，不分哪一楼只留最近两次）、无响应超时
 - `src/streamSafe/`：酒馆正在流式出字时，写完 tag 的楼层更新通知先排队，输出完再补发
+- `src/tagDict/`、`dict/tags.json`、`scripts/tagDict/`：标签库（4 万多个 Danbooru 标签和中文名，数据照搬 my-app 自然语言生图，含 GPL-3.0 的 BooruTagCart 译名，自用）。写 tag 前把正文里认识的中文词「中文=英文」附给 AI；AI 写完后纠正写法、去重；编辑提示词时中文 / 英文联想；设置 → 标签库 里三个开关
 - `src/fork.guard.test.ts`、本文件
 
 ## 合并原作者更新的步骤

@@ -32,6 +32,7 @@ import {
   type CharTagField,
 } from '@/state/charTags';
 import { assembleHeavyMessages, heavyFirst, heavyPresetUsable } from '@/autoTag/heavyPreset';
+import { fixPlanWithDict, tagHintFor, withTagHint } from '@/tagDict/autoTag';
 import { injectImageTags, parseImagePlan, type ImagePlan } from '@/autoTag/protocol';
 import {
   clearAutoGenerateForFloor,
@@ -339,7 +340,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
       : regenImageOptions(settings.autoTag, opts.count); // fork:重新生成时用户定的张数上限
     // 协议形态开跑时快照一次:写协议、验收与收尾同一份,用户中途拨开关也不会前后不一
     const profile = autoTagProfile();
-    const messages = await buildAutoTagMessages(
+    const builtMessages = await buildAutoTagMessages(
       context,
       floor,
       promptOptions,
@@ -349,6 +350,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
       slot ? withSlotPositions(slot.many ? manySlotTaskNote(rawSource, slot.many) : withRewriteHint(buildSlotTaskNote(rawSource, slot.seq), slot.hint), rawSource, slotSeqs(slot), settings.excludes.customStripTags) : opts.focus ? passageTaskNote(opts.focus) : '', // fork:报上图的位置
       profile,
     );
+    const messages = withTagHint(builtMessages, await tagHintFor(settings.autoTag.tagDict, `${slot?.hint ?? ''}\n${opts.focus ?? ''}\n${preparedTarget.promptText}`)); // fork:标签库参考
     const channel = getTagGenChannel();
     // 失败重试:请求异常与「返回无法解析/校验不通过」都视为可重试的异常(后者常见于模型没遵守协议);
     // 中止信号立即收手,不消耗重试。parseImagePlan 对坏输出抛错,「无画面」则是正常返回空数组。
@@ -446,6 +448,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
       return { kind: 'failed', reason };
     }
 
+    await fixPlanWithDict(settings.autoTag.tagDict, plan, opts.quiet); // fork:标签库纠正写法
     if (opts.focus) pinFocusPosition(plan.images, preparedTarget.segments, opts.focus); // fork:图钉到所选段落后
     if (opts.focus) rememberFocusSources(floor, plan.images, preparedTarget.segments, opts.focus); // fork:记下每张图按哪几段出的
 

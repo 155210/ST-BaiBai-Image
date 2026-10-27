@@ -9,6 +9,7 @@ import ModalMask from '@/components/ModalMask.vue';
 import RewriteHintBox from '@/rewriteHint/RewriteHintBox.vue';
 import StreamView from '@/stream/StreamView.vue';
 import PromptOnlyEdit from '@/promptOnlyEdit/PromptOnlyEdit.vue'; // fork:只改提示词(不发正文)
+import TagSuggestArea from '@/tagDict/TagSuggestArea.vue'; // fork:标签联想
 import { activeOrientationLock } from '@/state/settings';
 import { containsTagMarkup, type ImageTagContent } from '@/st/imageTagRegex';
 
@@ -304,7 +305,7 @@ onBeforeUnmount(() => {
 
       <div class="bbi-modal-field">
         <span class="bbi-modal-label">画面 tag(danbooru 短 tag,逗号分隔)</span>
-        <BbiTextarea
+        <TagSuggestArea
           v-model="tag"
           class="bbi-prompt-area"
           :rows="4"
@@ -327,7 +328,7 @@ onBeforeUnmount(() => {
 
       <div class="bbi-modal-field">
         <span class="bbi-modal-label">本画面负面提示词(可留空;与渠道级负面词叠加)</span>
-        <BbiTextarea
+        <TagSuggestArea
           v-model="negative"
           class="bbi-prompt-area"
           :rows="2"
