@@ -22,6 +22,7 @@ import {
 import BbiCombo from '@/components/BbiCombo.vue';
 import BbiSelect from '@/components/BbiSelect.vue';
 import BbiTextarea from '@/components/BbiTextarea.vue';
+import TagSuggestArea from '@/tagDict/TagSuggestArea.vue'; // fork:标签联想
 import Collapsible from '@/components/Collapsible.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import Icon from '@/components/Icon.vue';
@@ -691,13 +692,13 @@ function applyAssist() {
               <span class="bbi-field-label">提示词</span>
             </div>
             <div class="wf-prompts">
-              <BbiTextarea
+              <TagSuggestArea
                 v-model="active.simple.positive"
                 :rows="2"
                 :max-rows="6"
                 placeholder="固定正面:质量词/风格词等,拼在 AI 生成内容之前"
               />
-              <BbiTextarea
+              <TagSuggestArea
                 v-if="meta.supportsNegative"
                 v-model="active.simple.negative"
                 :rows="2"

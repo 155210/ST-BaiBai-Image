@@ -163,6 +163,13 @@
 | src/state/settings.ts | tagDict: normalizeTagDict(rt.tagDict), // fork:标签库 | 同上：读设置 | 标签库 |
 | src/pages/settings/index.vue | <TagDictPanel /> | 设置页「标签库」开关 | 标签库 |
 | src/floor/PromptEditor.vue | import TagSuggestArea from '@/tagDict/TagSuggestArea.vue'; | 编辑提示词的画面 tag、负面提示词输入框带标签联想 | 标签库 |
+| src/floor/PromptEditor.vue | <TagSuggestArea | 画面 tag、负面、角色 tag 输入框换成带联想的 | 标签库 |
+| src/pages/characters/index.vue | import TagSuggestArea from '@/tagDict/TagSuggestArea.vue'; | 角色库外貌字段、整串模式带标签联想 | 人物提示词联想 |
+| src/pages/characters/index.vue | <TagSuggestArea | 同上 | 人物提示词联想 |
+| src/pages/backend/panels/NaiPanel.vue | import TagSuggestArea from '@/tagDict/TagSuggestArea.vue'; | NAI 固定提示词编辑框带标签联想 | 人物提示词联想 |
+| src/pages/backend/panels/NaiPanel.vue | <TagSuggestArea | 同上 | 人物提示词联想 |
+| src/pages/backend/panels/ComfyUIPanel.vue | import TagSuggestArea from '@/tagDict/TagSuggestArea.vue'; | ComfyUI 简易模式固定正面 / 负面带标签联想 | 人物提示词联想 |
+| src/pages/backend/panels/ComfyUIPanel.vue | <TagSuggestArea | 同上 | 人物提示词联想 |
 
 ## 其他本分支改动（不在原作者文件里，或合并时一定会冲突、手动处理）
 
@@ -188,7 +195,7 @@
 - `src/autoTag/heavyPreset.ts`、`src/pages/settings/HeavyPresetPanel.vue`：解析失败时改用酒馆预设（重型自定义提示词），也可以设成一开始就直接用
 - `src/stream/`：副 API 流式实时输出（往上翻看时定住、可复制全文、能中断这次写 tag；显示全文、新内容只追加；楼层上的折叠区写完后留着，不分哪一楼只留最近两次）、无响应超时
 - `src/streamSafe/`：酒馆正在流式出字时，写完 tag 的楼层更新通知先排队，输出完再补发
-- `src/tagDict/`、`dict/tags.json`、`scripts/tagDict/`：标签库（4 万多个 Danbooru 标签和中文名，数据照搬 my-app 自然语言生图，含 GPL-3.0 的 BooruTagCart 译名，自用）。写 tag 前把正文里认识的中文词「中文=英文」附给 AI；AI 写完后纠正写法、去重；编辑提示词时中文 / 英文联想；设置 → 标签库 里三个开关
+- `src/tagDict/`、`dict/tags.json`、`scripts/tagDict/`：标签库（4 万多个 Danbooru 标签和中文名，数据照搬 my-app 自然语言生图，含 GPL-3.0 的 BooruTagCart 译名，自用）。写 tag 前把正文里认识的中文词「中文=英文」附给 AI；AI 写完后纠正写法、去重；编辑提示词（画面 tag、负面、角色 tag）、角色库外貌字段、渠道固定提示词里中文 / 英文联想；设置 → 标签库 里三个开关
 - `src/state/modelSwitch.ts`：图片浏览上方的「出图模型」下拉（NAI 模型和 ComfyUI 工作流放一起），读写的就是渠道页那几个设置，两边同步
 - `src/fork.guard.test.ts`、本文件
 

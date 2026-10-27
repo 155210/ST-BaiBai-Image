@@ -38,5 +38,5 @@ onMounted(async () => {
     <span class="bbi-field-label">编辑提示词时联想标签</span>
     <input v-model="settings.autoTag.tagDict.suggest" type="checkbox" class="bbi-checkbox" />
   </label>
-  <p class="bbi-field-hint">在「画面 tag」「负面提示词」里打中文（如「黑发」）或英文开头，下面列出候选，点一下换成英文标签。</p>
+  <p class="bbi-field-hint">在编辑提示词（画面 tag、负面、角色 tag）、角色库外貌字段、渠道固定提示词里打中文（如「黑发」）或英文开头，下面列出候选，点一下换成英文标签。</p>
 </template>

@@ -51,6 +51,7 @@ import {
 import Collapsible from '@/components/Collapsible.vue';
 import BbiSelect from '@/components/BbiSelect.vue';
 import BbiTextarea from '@/components/BbiTextarea.vue';
+import TagSuggestArea from '@/tagDict/TagSuggestArea.vue'; // fork:标签联想
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import Icon from '@/components/Icon.vue';
 import ModalMask from '@/components/ModalMask.vue';
@@ -1658,7 +1659,7 @@ async function removeVibe(vibe: NaiVibe) {
 
         <p class="bbi-modal-label">{{ editingNaiPrompt.hint }}</p>
 
-        <BbiTextarea
+        <TagSuggestArea
           v-model="naiPromptDraft"
           class="bbi-prompt-area"
           :rows="12"
