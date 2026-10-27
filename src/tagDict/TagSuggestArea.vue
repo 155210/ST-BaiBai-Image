@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
 import BbiTextarea from '@/components/BbiTextarea.vue';
 import { settings } from '@/state/settings';
@@ -7,7 +7,8 @@ import { fmtCount, normTag, type TagEntry } from '@/tagDict/dict';
 import { loadTagDict, tagDict } from '@/tagDict/load';
 
 /**
- * 带标签联想的 tag 输入框(编辑提示词弹窗的「画面 tag」「负面提示词」用)。
+ * 带标签联想的 tag 输入框(编辑提示词弹窗的画面 tag / 负面 / 角色 tag、角色库外貌字段、渠道固定提示词用)。
+ * single = 单行 input(角色行、角色库字段),否则是自适应高度的多行框。
  * 光标所在的那一段(两个逗号之间)打中文或英文开头,框下面列出标签库里的候选,
  * 点一下把这一段换成英文标签。设置 → 标签库 里可以关。
  */
@@ -18,8 +19,10 @@ const props = withDefaults(
     maxRows?: number;
     mono?: boolean;
     placeholder?: string;
+    single?: boolean;
+    readonly?: boolean;
   }>(),
-  { rows: 1, maxRows: 12, mono: false, placeholder: '' },
+  { rows: 1, maxRows: 12, mono: false, placeholder: '', single: false, readonly: false },
 );
 const emit = defineEmits<{ (e: 'update:modelValue', v: string): void }>();
 
@@ -28,18 +31,38 @@ const wrap = ref<HTMLElement | null>(null);
 const caret = ref(-1);
 let blurTimer: ReturnType<typeof setTimeout> | undefined;
 
-const enabled = computed(() => settings.autoTag.tagDict?.suggest !== false);
+const enabled = computed(() => !props.readonly && settings.autoTag.tagDict?.suggest !== false);
 
 const SEP = /[,，\n]/;
 const SPECIAL = /[:{}[\]()\\@|<>]/;
 
-function textarea(): HTMLTextAreaElement | null {
-  return wrap.value?.querySelector('textarea') ?? null;
+function field(): HTMLTextAreaElement | HTMLInputElement | null {
+  return wrap.value?.querySelector('textarea, input') ?? null;
+}
+
+// 单行框照 BbiTextarea 的口径挡输入法拼音串。值不用 :value 绑:本组件一重绘(光标位置变了、
+// 标签库读好了)Vue 就会把框里的字写回 modelValue,输入法打到一半的拼音会被冲掉
+let composing = false;
+const singleEl = ref<HTMLInputElement | null>(null);
+function syncSingle(): void {
+  if (singleEl.value && !composing && singleEl.value.value !== props.modelValue) singleEl.value.value = props.modelValue;
+}
+onMounted(syncSingle);
+watch(() => props.modelValue, syncSingle);
+function onSingleInput(event: Event): void {
+  if (!composing) emit('update:modelValue', (event.target as HTMLInputElement).value);
+}
+function onSingleCompositionStart(): void {
+  composing = true;
+}
+function onSingleCompositionEnd(event: CompositionEvent): void {
+  composing = false;
+  emit('update:modelValue', (event.target as HTMLInputElement).value);
 }
 
 function track(event: Event): void {
-  const node = event.target as HTMLTextAreaElement | null;
-  if (!node || node.tagName !== 'TEXTAREA') return;
+  const node = event.target as HTMLTextAreaElement | HTMLInputElement | null;
+  if (!node || node !== field() || composing || (event as InputEvent).isComposing) return;
   clearTimeout(blurTimer);
   caret.value = node.selectionEnd ?? node.value.length;
   if (enabled.value && !tagDict.value) void loadTagDict();
@@ -88,7 +111,7 @@ function pick(entry: TagEntry): void {
   emit('update:modelValue', next);
   caret.value = pos;
   void nextTick(() => {
-    const node = textarea();
+    const node = field();
     if (!node) return;
     node.focus();
     node.setSelectionRange(pos, pos);
@@ -107,12 +130,26 @@ function pick(entry: TagEntry): void {
     @focusin="track"
     @focusout="leave"
   >
+    <input
+      v-if="single"
+      ref="singleEl"
+      class="bbi-input bbi-tag-suggest__input"
+      type="text"
+      spellcheck="false"
+      :placeholder="placeholder"
+      :readonly="readonly"
+      @input="onSingleInput"
+      @compositionstart="onSingleCompositionStart"
+      @compositionend="onSingleCompositionEnd"
+    />
     <BbiTextarea
+      v-else
       :model-value="modelValue"
       :rows="rows"
       :max-rows="maxRows"
       :mono="mono"
       :placeholder="placeholder"
+      :readonly="readonly"
       @update:model-value="emit('update:modelValue', $event)"
     />
     <div v-if="items.length" class="bbi-tag-suggest__list" role="listbox" aria-label="标签候选">
@@ -141,10 +178,15 @@ function pick(entry: TagEntry): void {
   width: 100%;
 }
 
-.bbi-tag-suggest :deep(.bbi-textarea) {
-  /* 调用方给的 class(字号、行高)落在外层,里面的输入框跟着它 */
+.bbi-tag-suggest.bbi-prompt-area :deep(.bbi-textarea) {
+  /* 调用方的 .bbi-prompt-area(字号、行高)落在外层,里面的输入框跟着它 */
   font-size: inherit;
   line-height: inherit;
+}
+
+.bbi-tag-suggest__input {
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .bbi-tag-suggest__list {
@@ -155,6 +197,7 @@ function pick(entry: TagEntry): void {
 
 .bbi-tag-suggest__item {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 6px;
   max-width: 100%;
@@ -183,10 +226,9 @@ function pick(entry: TagEntry): void {
 }
 
 .bbi-tag-suggest__en {
-  overflow: hidden;
+  min-width: 0;
   opacity: 0.75;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 </style>
