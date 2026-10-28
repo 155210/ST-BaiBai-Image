@@ -9,6 +9,7 @@ import { isCurrentChatExcluded, settings } from '@/state/settings';
 
 import { slotThumb } from './floorPassageGen';
 import MultiRewriteDialog from './MultiRewriteDialog.vue';
+import { setSlotNoNl, slotNoNl } from '@/nlSwitch/perSlot';
 import type { SlotEdit } from './multiRewrite';
 
 /**
@@ -29,6 +30,8 @@ export interface SlotItem {
   seq: number;
   prompt: string;
   src?: string;
+  /** 这张出图不发自然语言(nlSwitch/perSlot.ts) */
+  noNl: boolean;
 }
 
 function setRunning(button: HTMLElement, running: boolean): void {
@@ -38,7 +41,7 @@ function setRunning(button: HTMLElement, running: boolean): void {
   button.classList.toggle('fa-spin', running);
 }
 
-function openDialog(floor: number, items: SlotItem[], onSubmit: (edits: SlotEdit[]) => void): void {
+function openDialog(floor: number, items: SlotItem[], onSubmit: (edits: SlotEdit[], noNl: boolean[]) => void): void {
   const root = document.getElementById(HOST_ID)?.shadowRoot;
   if (!root) return;
   closeCurrent?.();
@@ -67,10 +70,10 @@ function openDialog(floor: number, items: SlotItem[], onSubmit: (edits: SlotEdit
         configured: backendStatus().configured,
         closing,
         onClose: close,
-        onSubmit: (edits: SlotEdit[]) => {
+        onSubmit: (edits: SlotEdit[], noNl: boolean[]) => {
           if (closing) return;
           close();
-          onSubmit(edits);
+          onSubmit(edits, noNl);
         },
       }),
       container,
@@ -91,16 +94,19 @@ function onActivate(button: HTMLElement): void {
     toastr.warning('柏宝绘已停用，请先在插件设置里开启', '柏宝绘');
     return;
   }
+  const at = { chatId: getContext()?.getCurrentChatId?.() ?? '', messageId: floor, swipeId: message.swipe_id ?? 0 };
   const items = parseImageTags(message.mes ?? '').map((raw, seq) => ({
     seq,
     prompt: formatPromptText(parseImageTagContent(raw)).trim(),
     src: slotThumb(floor, seq),
+    noNl: slotNoNl({ ...at, seq }),
   }));
   if (!items.length) {
     toastr.info('本楼还没有图', '柏宝绘');
     return;
   }
-  openDialog(floor, items, edits => {
+  openDialog(floor, items, (edits, noNl) => {
+    items.forEach((item, i) => setSlotNoNl({ ...at, seq: item.seq }, noNl[i] ?? false));
     setRunning(button, true);
     void requestManySlotTags(floor, edits).finally(() => setRunning(button, false));
   });
