@@ -30,6 +30,7 @@ import { effectiveOrientation, parseSize, pickSize, type Orientation } from '@/b
 import { acquireNaiSlot } from '@/floor/genQueue';
 import type { GenerationMeta } from '@/generationMeta';
 import { recordDailyGen } from '@/naiQuota/daily';
+import { nlForSend } from '@/nlSwitch/send'; // fork:开关关着不发已有的 nl
 import { activeComfyPreset, activeNaiEndpoint, activeOrientationLock, effectiveComfyConn, effectiveNai, settings, type BackendId } from '@/state/settings';
 
 /** 一次生成的输入。与协议层 ImageInsertion 同形,但不含正文位置信息。 */
@@ -198,11 +199,12 @@ export async function generateImage(
     let result: ComfyImageResult;
     let meta: GenerationMeta;
     if (isNai) {
+      const nai = effectiveNai();
       const output = await generateNaiImage(
-        effectiveNai(),
+        nai,
         // characters 原样透传:不支持的模型由 buildNaiParameters 自己滤掉(同一口径
         // naiSupportsCharacterPrompts),在这儿再滤一遍只会多一处会漂的判据
-        { prompt: input.prompt, nl: input.nl ?? '', characters, seed: input.seed, size },
+        nlForSend(nai.naturalLanguage, { prompt: input.prompt, nl: input.nl ?? '', characters, seed: input.seed, size }), // fork:开关关着不发已有的 nl
         signal,
         { onRetry: info => progress.onRetry?.({ attempt: info.attempt, max: info.max }) },
       );

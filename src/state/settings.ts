@@ -309,8 +309,7 @@ export interface NaiSettings extends BackendConn {
   activeArtistId: string;
   /**
    * 生成自然语言(仅 4.5/V5 有意义,默认开 = 改动前的行为):开 = 自动 tag 为 Base 与每个角色
-   * 写英文 nl;关 = 只写 tag。与 ComfyUI 工作流的同名开关同一口径——**只管 AI 写不写,
-   * 不管发不发**:tag 里已有的 nl 照常发送(想对比就清掉 nl 或「AI 重写提示词」)。
+   * 写英文 nl;关 = 只写 tag。fork:关着时出图也不发 tag 里已有的 nl(见 nlSwitch/send.ts)。
    * 关它不影响原生多角色提示(characters[]),那是模型能力,不是写法。
    * 存在理由:4.5 的提示词预算(约 512 token,Base 与全部角色共用)比 V5 紧得多,
    * nl 是最大头,超了会被截断、画面跟着走样。
