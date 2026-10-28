@@ -14,6 +14,12 @@ const props = defineProps<{ nav: LightboxNav }>();
 
 // 生成状态不归灯箱管(在 genState 里),开着时定时问一下
 const status = ref<LightboxStatus | null>(null);
+// 操作按钮平时收进「⋯」,免得挡住图;点开才摆出来,点了哪个就收回去
+const expanded = ref(false);
+function run(action?: () => void): void {
+  expanded.value = false;
+  action?.();
+}
 let timer: ReturnType<typeof setInterval> | undefined;
 function poll(): void {
   status.value = props.nav.poll?.() ?? null;
@@ -65,31 +71,44 @@ onBeforeUnmount(() => {
   </button>
   <div class="bbi-lbnav-panel" @click.stop>
     <span v-if="nav.label" class="bbi-lbnav-label">{{ nav.label }}</span>
-    <span v-if="nav.rolls && nav.rolls.total > 1" class="bbi-lbnav-rolls" title="同一张卡片出过的几次图">
-      <button type="button" aria-label="这张卡片的上一次" :disabled="!nav.rolls.prev" @click="nav.rolls.prev?.()">‹</button>
-      <span>第 {{ nav.rolls.index + 1 }}/{{ nav.rolls.total }} 次</span>
-      <button type="button" aria-label="这张卡片的下一次" :disabled="!nav.rolls.next" @click="nav.rolls.next?.()">›</button>
+    <span class="bbi-lbnav-row">
+      <span v-if="nav.rolls && nav.rolls.total > 1" class="bbi-lbnav-rolls" title="同一张卡片出过的几次图">
+        <button type="button" aria-label="这张卡片的上一次" :disabled="!nav.rolls.prev" @click="nav.rolls.prev?.()">‹</button>
+        <span>第 {{ nav.rolls.index + 1 }}/{{ nav.rolls.total }} 次</span>
+        <button type="button" aria-label="这张卡片的下一次" :disabled="!nav.rolls.next" @click="nav.rolls.next?.()">›</button>
+      </span>
+      <button
+        v-if="(!status || status.error) && (nav.regenerate || nav.edit || nav.menu?.length)"
+        class="bbi-lbnav-pill bbi-lbnav-more"
+        :class="{ 'is-on': expanded }"
+        type="button"
+        :aria-expanded="expanded"
+        :title="expanded ? '收起操作' : '重新生成、编辑等操作'"
+        @click="expanded = !expanded"
+      >
+        {{ expanded ? '✕ 收起' : '⋯ 操作' }}
+      </button>
     </span>
     <span v-if="status" class="bbi-lbnav-row">
       <span class="bbi-lbnav-status" :class="{ 'is-error': status.error }">{{ status.text }}</span>
       <button v-if="status.cancel" class="bbi-lbnav-pill" type="button" @click="status.cancel()">取消</button>
     </span>
-    <span v-if="!status || status.error" class="bbi-lbnav-row">
-      <button v-if="nav.regenerate" class="bbi-lbnav-pill is-accent" type="button" title="按现在的提示词重新出一张" @click="nav.regenerate()">
+    <span v-if="expanded && (!status || status.error)" class="bbi-lbnav-row">
+      <button v-if="nav.regenerate" class="bbi-lbnav-pill is-accent" type="button" title="按现在的提示词重新出一张" @click="run(nav.regenerate)">
         ↻ 重新生成
       </button>
-      <button v-if="nav.edit" class="bbi-lbnav-pill" type="button" title="编辑这张卡片的提示词" @click="nav.edit()">
+      <button v-if="nav.edit" class="bbi-lbnav-pill" type="button" title="编辑这张卡片的提示词" @click="run(nav.edit)">
         ✎ 编辑
       </button>
     </span>
-    <span v-if="nav.menu?.length && (!status || status.error)" class="bbi-lbnav-row">
+    <span v-if="expanded && nav.menu?.length && (!status || status.error)" class="bbi-lbnav-row bbi-lbnav-menu">
       <button
         v-for="item in nav.menu"
         :key="item.label"
         class="bbi-lbnav-pill"
         :class="{ 'is-danger': item.danger }"
         type="button"
-        @click="item.action()"
+        @click="run(item.action)"
       >
         {{ item.label }}
       </button>
@@ -188,6 +207,13 @@ onBeforeUnmount(() => {
   max-width: 70vw;
   background: oklch(0.45 0.15 25 / 0.85);
   word-break: break-all;
+}
+.bbi-lbnav-menu {
+  flex-direction: column;
+  align-items: flex-start;
+}
+.bbi-lbnav-more.is-on {
+  border-color: var(--bbi-accent);
 }
 .bbi-lbnav-pill.is-accent {
   border-color: var(--bbi-accent);

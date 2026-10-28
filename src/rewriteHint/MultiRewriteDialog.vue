@@ -20,12 +20,14 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'submit', edits: SlotEdit[]): void;
+  /** noNl:每张(按 items 顺序)出图时发不发自然语言 */
+  (e: 'submit', edits: SlotEdit[], noNl: boolean[]): void;
   (e: 'close'): void;
 }>();
 
 const open = ref(false);
 const hints = ref<string[]>(props.items.map(() => ''));
+const noNl = ref<boolean[]>(props.items.map(item => item.noNl));
 const filled = computed(() => props.items.map((item, i) => ({ seq: item.seq, hint: hints.value[i] ?? '' })).filter(e => e.hint.trim()));
 
 watch(
@@ -75,6 +77,10 @@ onBeforeUnmount(() => {
             :maxlength="MAX_REWRITE_HINT"
             placeholder="这张怎么改（留空不改），比如：换成全身构图"
           />
+          <label class="bbi-multi-rewrite__nonl">
+            <input v-model="noNl[i]" type="checkbox" class="bbi-checkbox" />
+            出图不发自然语言（只发 tag）
+          </label>
         </li>
       </ul>
       <footer class="bbi-modal-foot">
@@ -85,7 +91,7 @@ onBeforeUnmount(() => {
           type="button"
           :disabled="!filled.length || !configured"
           :title="configured ? '' : '请先在柏宝绘「渠道」页完成配置'"
-          @click="emit('submit', filled)"
+          @click="emit('submit', filled, [...noNl])"
         >
           一起改{{ filled.length ? ` ${filled.length} 张` : '' }}
         </button>
@@ -95,6 +101,14 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.bbi-multi-rewrite__nonl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  opacity: 0.85;
+}
+
 .bbi-multi-rewrite__tip {
   margin: 0;
   font-size: 12.5px;

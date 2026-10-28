@@ -16,6 +16,7 @@ import { promptHash, saveImageResult } from '@/floor/storage';
 import { activeComfyPreset, settings } from '@/state/settings';
 import { beginImage, failImage, finishImage, safeHistory } from '@/state/history';
 import { getContext } from '@/st/context';
+import { nlForSlot } from '@/nlSwitch/perSlot';
 
 /**
  * 给一个槽位出一张图并落盘:楼层卡片的「生成图片」和批量出图共用这一条路。
@@ -41,7 +42,9 @@ export interface SlotJob {
 
 export type SlotResult = { kind: 'saved' } | { kind: 'superseded' | 'aborted' } | { kind: 'failed'; error: string };
 
-export async function generateSlot(job: SlotJob): Promise<SlotResult> {
+export async function generateSlot(original: SlotJob): Promise<SlotResult> {
+  // 这张勾了「不发自然语言」就只发 tag(nlSwitch/perSlot.ts)
+  const job = nlForSlot(original);
   const slot = slotKey(job.chatId, job.messageId, job.swipeId, job.seq);
   const naiActive = settings.defaultBackend === 'nai';
   // NAI 需要闸门排队 → 先显示「排队中」;ComfyUI 有服务端队列,直接进 generating

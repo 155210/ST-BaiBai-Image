@@ -16,6 +16,7 @@ import { getContext } from '@/st/context';
 import { formatPromptText } from '@/st/imageTagRegex';
 import { textBeforeImage } from '@/imageContext/before';
 import { hasSlotVersions, openSlotVersions } from '@/promptVersions/restore';
+import { setSlotNoNl, slotNoNl } from '@/nlSwitch/perSlot';
 import { settings } from '@/state/settings';
 
 /**
@@ -228,6 +229,16 @@ export function openGalleryLightbox(options: GalleryLightboxOptions): void {
   if (hasSlotVersions(slotAt, view.tag)) {
     nav.menu.unshift({ label: '🕘 提示词历史（换回改之前的）', action: () => openSlotVersions(slotAt) });
   }
+  // 这张出图发不发自然语言:点一下切换,大图按新状态重开
+  const noNl = slotNoNl(slotAt);
+  nav.menu.unshift({
+    label: noNl ? '☑ 出图不发自然语言（点一下改回发）' : '☐ 出图不发自然语言',
+    action: () => {
+      setSlotNoNl(slotAt, !noNl);
+      toastr.info(noNl ? '这张出图会照常发自然语言' : '这张以后出图只发 tag，不发自然语言', '柏宝绘');
+      openGalleryLightbox({ ...options, entry });
+    },
+  });
   // 这张卡片正在生成(从聊天楼层、卡片或批量发起的都算):左上显示进度和取消,出完换成新图
   const key = slotKey(context.getCurrentChatId?.() ?? '', view.floor, view.swipeId, view.seq);
   const before = slotImage(view)?.generationId ?? '';
