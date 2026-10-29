@@ -158,6 +158,8 @@
 | src/floor/PromptEditor.vue | function fillDraft(next: ImageTagContent) | 同上 | 只改提示词 |
 | src/generate.ts | import { nlForSend } from '@/nlSwitch/send'; | NAI「生成自然语言」关着时出图不发 tag 里已有的 nl | 自然语言开关 |
 | src/generate.ts | nlForSend(nai.naturalLanguage, | 同上 | 自然语言开关 |
+| src/floor/Card.vue | import NoNlFab from '@/nlSwitch/NoNlFab.vue'; | 聊天里图片「⋯」的「出图不发自然语言」开关 | 自然语言开关 |
+| src/floor/Card.vue | <NoNlFab :at= | 同上：按钮本身 | 自然语言开关 |
 | src/pages/backend/panels/NaiPanel.vue | 关掉后出图也不再发正文里已有的自然语言 | 同上：开关说明 | 自然语言开关 |
 | src/state/settings.ts | fork:关着时出图也不发 tag 里已有的 nl | 同上：注释 | 自然语言开关 |
 | src/autoTag/runner.ts | import { fixPlanWithDict, tagHintFor, withTagHint } from '@/tagDict/autoTag'; | 引入标签库 | 标签库 |
@@ -196,7 +198,7 @@
 - `src/imageContext/`：图片浏览的大图下面、提示词上面显示这张图前面的几段正文，方便对照图和文字
 - `src/promptVersions/`：一张图用过的提示词（出过图的从图片记录里找，没出过图就被改掉的记在消息 extra 的 bbiPromptMemo），点「换回这版」把提示词写回正文，那版的图跟着回来
 - `src/promptOnlyEdit/`：编辑提示词里的「只改提示词（不发正文）」，只把现在的提示词和要求发给 AI，改好填进输入框，用户自己点应用
-- `src/nlSwitch/`：NAI「生成自然语言」关掉时，出图也不发正文 tag 里已有的自然语言（正文不改）；也能按张勾「出图不发自然语言」（图片浏览大图的「⋯ 操作」里、「一起改这层的图」里每张一个勾，perSlot.ts，记在浏览器里）
+- `src/nlSwitch/`：NAI「生成自然语言」关掉时，出图也不发正文 tag 里已有的自然语言（正文不改）；也能按张勾「出图不发自然语言」（聊天里图片「⋯」的 NL 按钮、图片浏览大图的「⋯ 操作」里、「一起改这层的图」里每张一个勾，perSlot.ts，记在浏览器里）
 - `src/viewportFit/`：插件主面板和大图（聊天里的和图片浏览里的）按手机实际可见屏幕摆位置和高度，地址栏伸缩后底下不露黑屏、顶上按钮不被状态栏挡
 - `src/naiQuota/`：NAI 官方订阅额度与 Anlas 显示（Anlas 分订阅送的 / 买的，Opus 免费额度剩几 % 约几张、每天回几 % 约几张、几天回满）、每张费用估算、「只用免费额度」开关（批量遇到会直接暂停）、每日出图张数（daily.ts，按模型分开、能选模型和从哪天往前看，存在浏览器里、留 400 天，导出设置时一起带走、导入时合并，可二次确认清空）
 - `src/rewriteHint/`：AI 重写提示词时可以写额外要求；「挑正文里的一段」点选本楼段落只画那几段；楼层「⋯」里有「挑一段生图」按钮（可一次挑几组段落、每组一张，只调一次 AI；已有图的楼是「再加图」，新图插到所选段落后、原来的图不动）；楼层「重新生成 tag」可以不指定段落并定最多几张，或指定段落几组几张；按段落出的图会记下是哪几段（消息 extra 的 bbiPassageSources），再加图时标在那几段上；没写成时再打开会带上上次选的段落；选了没生成就自动存着，下次打开接着选，点「清空」才清掉（pickDraft.ts，存在浏览器里、按段落原文找回）；有图的楼「⋯」里还有「一起改这层的图」，每张写修改要求、一次发给 AI 一起改；重写提示词时把每张图在正文里的位置一并报给 AI（slotPosition.ts），免得它自己推算

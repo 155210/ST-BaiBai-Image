@@ -16,6 +16,7 @@ import { openLightbox } from '@/floor/lightbox';
 import { confirmImageMissing, isImageMissing } from '@/floor/missingImages';
 import { openPromptEditor } from '@/floor/promptEditor';
 import { hasSlotVersions, openSlotVersions } from '@/promptVersions/restore'; // fork:提示词历史
+import NoNlFab from '@/nlSwitch/NoNlFab.vue'; // fork:这张出图不发自然语言
 import { generateSlot } from '@/floor/slotGenerate';
 import { deleteImageResult, promptHash, type BbiImageEntry } from '@/floor/storage';
 import { isTagPlanning } from '@/floor/tagPlanState';
@@ -523,6 +524,7 @@ onMounted(() => {
           >
             <Icon name="history" :size="15" />
           </button>
+          <NoNlFab :at="{ chatId, messageId, swipeId, seq }" @done="menuOpen = false" />
           <button
             v-if="promptText"
             class="bbi-fab"
