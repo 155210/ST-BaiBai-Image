@@ -6,10 +6,12 @@ export interface TagDictSettings {
   fix: boolean;
   /** 编辑提示词时:输入中文或英文开头,下面给出标签候选 */
   suggest: boolean;
+  /** 编辑提示词时:框下面的「− 1.3 +」给光标所在的 tag 加减权重 */
+  weight: boolean;
 }
 
 export function tagDictDefaults(): TagDictSettings {
-  return { hint: true, fix: true, suggest: true };
+  return { hint: true, fix: true, suggest: true, weight: true };
 }
 
 export function normalizeTagDict(raw: unknown): TagDictSettings {
@@ -19,5 +21,6 @@ export function normalizeTagDict(raw: unknown): TagDictSettings {
     hint: typeof r.hint === 'boolean' ? r.hint : d.hint,
     fix: typeof r.fix === 'boolean' ? r.fix : d.fix,
     suggest: typeof r.suggest === 'boolean' ? r.suggest : d.suggest,
+    weight: typeof r.weight === 'boolean' ? r.weight : d.weight,
   };
 }

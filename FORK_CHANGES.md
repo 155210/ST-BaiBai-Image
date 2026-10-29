@@ -203,7 +203,7 @@
 - `src/autoTag/heavyPreset.ts`、`src/pages/settings/HeavyPresetPanel.vue`：解析失败时改用酒馆预设（重型自定义提示词），也可以设成一开始就直接用
 - `src/stream/`：副 API 流式实时输出（往上翻看时定住、可复制全文、能中断这次写 tag；显示全文、新内容只追加；楼层上的折叠区写完后留着，不分哪一楼只留最近两次）、无响应超时
 - `src/streamSafe/`：酒馆正在流式出字时，写完 tag 的楼层更新通知先排队，输出完再补发
-- `src/tagDict/`、`dict/tags.json`、`scripts/tagDict/`：标签库（4 万多个 Danbooru 标签和中文名，数据照搬 my-app 自然语言生图，含 GPL-3.0 的 BooruTagCart 译名，自用）。写 tag 前把正文里认识的中文词「中文=英文」附给 AI；AI 写完后纠正写法、去重；编辑提示词（画面 tag、负面、角色 tag）、角色库外貌字段、渠道固定提示词里中文 / 英文联想；设置 → 标签库 里三个开关
+- `src/tagDict/`、`dict/tags.json`、`scripts/tagDict/`：标签库（4 万多个 Danbooru 标签和中文名，数据照搬 my-app 自然语言生图，含 GPL-3.0 的 BooruTagCart 译名，自用）。写 tag 前把正文里认识的中文词「中文=英文」附给 AI；AI 写完后纠正写法、去重；编辑提示词（画面 tag、负面、角色 tag）、角色库外貌字段、渠道固定提示词里中文 / 英文联想，框下面「− 1 +」给光标所在的 tag 加减权重（weight.ts，NAI 写成 1.3::tag::，其他 (tag:1.3)）；设置 → 标签库 里三个开关
 - `src/state/modelSwitch.ts`：图片浏览上方的「出图模型」下拉（NAI 模型和 ComfyUI 工作流放一起），读写的就是渠道页那几个设置，两边同步
 - `src/fork.guard.test.ts`、本文件
 

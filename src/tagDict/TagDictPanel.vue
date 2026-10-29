@@ -39,4 +39,10 @@ onMounted(async () => {
     <input v-model="settings.autoTag.tagDict.suggest" type="checkbox" class="bbi-checkbox" />
   </label>
   <p class="bbi-field-hint">在编辑提示词（画面 tag、负面、角色 tag）、角色库外貌字段、渠道固定提示词里打中文（如「黑发」）或英文开头，下面列出候选，点一下换成英文标签。</p>
+
+  <label class="bbi-switch-row">
+    <span class="bbi-field-label">提示词框加减权重</span>
+    <input v-model="settings.autoTag.tagDict.weight" type="checkbox" class="bbi-checkbox" />
+  </label>
+  <p class="bbi-field-hint">光标放在某个 tag 上（或刚写完它、停在逗号后面），框下面的「− 1 +」每点一下改 0.1。NAI 渠道写成 1.3::tag::，其他渠道写成 (tag:1.3)，调回 1 就去掉。</p>
 </template>
