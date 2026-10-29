@@ -5,12 +5,13 @@ import BbiTextarea from '@/components/BbiTextarea.vue';
 import { settings } from '@/state/settings';
 import { fmtCount, normTag, type TagEntry } from '@/tagDict/dict';
 import { loadTagDict, tagDict } from '@/tagDict/load';
+import { parseWeight, stepWeight, type WeightStyle } from '@/tagDict/weight';
 
 /**
  * 带标签联想的 tag 输入框(编辑提示词弹窗的画面 tag / 负面 / 角色 tag、角色库外貌字段、渠道固定提示词用)。
  * single = 单行 input(角色行、角色库字段),否则是自适应高度的多行框。
  * 光标所在的那一段(两个逗号之间)打中文或英文开头,框下面列出标签库里的候选,
- * 点一下把这一段换成英文标签。设置 → 标签库 里可以关。
+ * 点一下把这一段换成英文标签。左边的「− 1.3 +」给这个 tag 加减权重。设置 → 标签库 里可以关。
  */
 const props = withDefaults(
   defineProps<{
@@ -98,6 +99,51 @@ const items = computed<TagEntry[]>(() => {
   return list;
 });
 
+// —— 权重加减 ——
+const weightOn = computed(() => !props.readonly && settings.autoTag.tagDict?.weight !== false);
+/** 没写过权重的 tag 用哪种写法:NAI 渠道 1.3::tag::,其余 (tag:1.3) */
+const weightStyle = computed<WeightStyle>(() => (settings.defaultBackend === 'nai' ? 'nai' : 'sd'));
+
+/** 权重作用的那段:光标所在那段;那段是空的(刚点完候选、光标停在逗号后面)就用前一段 */
+const weightTarget = computed(() => {
+  if (!weightOn.value) return null;
+  const t = token.value;
+  if (!t) return null;
+  let { start, end } = t;
+  if (!t.whole) {
+    if (start === 0) return null;
+    end = start - 1;
+    start = end;
+    while (start > 0 && !SEP.test(props.modelValue[start - 1])) start--;
+  }
+  const raw = props.modelValue.slice(start, end);
+  const text = raw.trim();
+  if (!text || stepWeight(text, 0.1, weightStyle.value) === null) return null;
+  return { start, end, raw, text, weight: parseWeight(text).weight };
+});
+
+function bump(delta: number): void {
+  const w = weightTarget.value;
+  if (!w) return;
+  const next = stepWeight(w.text, delta, weightStyle.value);
+  if (!next || next === w.text) return;
+  const lead = /^\s*/.exec(w.raw)?.[0] ?? '';
+  const trail = /\s*$/.exec(w.raw)?.[0] ?? '';
+  const value = props.modelValue;
+  const grow = next.length - w.text.length;
+  // 光标在这段里就停在它末尾,在后面(前一段的情况)就跟着挪
+  const at = caret.value;
+  const pos = at <= w.end ? w.start + lead.length + next.length : at + grow;
+  emit('update:modelValue', `${value.slice(0, w.start)}${lead}${next}${trail}${value.slice(w.end)}`);
+  caret.value = pos;
+  void nextTick(() => {
+    const node = field();
+    if (!node) return;
+    node.focus();
+    node.setSelectionRange(pos, pos);
+  });
+}
+
 function pick(entry: TagEntry): void {
   const t = token.value;
   if (!t) return;
@@ -152,7 +198,12 @@ function pick(entry: TagEntry): void {
       :readonly="readonly"
       @update:model-value="emit('update:modelValue', $event)"
     />
-    <div v-if="items.length" class="bbi-tag-suggest__list" role="listbox" aria-label="标签候选">
+    <div v-if="items.length || weightTarget" class="bbi-tag-suggest__list" role="listbox" aria-label="标签候选">
+      <div v-if="weightTarget" class="bbi-tag-suggest__weight" :title="`${weightTarget.text} 的权重`">
+        <button type="button" aria-label="权重减 0.1" @mousedown.prevent @click="bump(-0.1)">−</button>
+        <span>{{ weightTarget.weight }}</span>
+        <button type="button" aria-label="权重加 0.1" @mousedown.prevent @click="bump(0.1)">+</button>
+      </div>
       <button
         v-for="entry in items"
         :key="entry[0]"
@@ -193,6 +244,40 @@ function pick(entry: TagEntry): void {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.bbi-tag-suggest__weight {
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--bbi-line-strong);
+  border-radius: var(--bbi-radius-pill);
+  background: var(--bbi-surface-2);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.bbi-tag-suggest__weight button {
+  min-width: 40px;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.bbi-tag-suggest__weight button:hover,
+.bbi-tag-suggest__weight button:focus-visible {
+  color: var(--bbi-accent);
+}
+
+.bbi-tag-suggest__weight span {
+  min-width: 2.5em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .bbi-tag-suggest__item {
