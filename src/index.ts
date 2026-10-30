@@ -8,6 +8,7 @@ import { injectMenuButton } from '@/menu';
 import { registerPublicInterface } from '@/public/register';
 import { bindCharTagSync } from '@/state/charTags';
 import { initGlobalCharTags } from '@/state/globalCharTags';
+import { bindModelArtistMemory } from '@/modelArtist/memory'; // fork:切模型时画师串跟着切
 import { hydrateSettings } from '@/state/settings';
 import { ui } from '@/state/ui';
 import { guardEditableArrowKeys } from '@/st/keyboard';
@@ -107,6 +108,7 @@ async function hydrateWhenReady(attempt = 0) {
       bindTagActionButtons();
       bindFloorStreamPanels(); // fork:楼层上的流式实时折叠区
       bindPassageGenButtons(); // fork:还没 tag 的楼「挑一段生图」
+      bindModelArtistMemory(); // fork:切模型时画师串跟着切
       // 公开接口必须排在 hydrateSettings 之后:设置回灌前 getBackendStatus() 读的是
       // 默认值,会把配好的用户报成「未配置」。排在 bindCharTagSync 之后则是为了让
       // ready 事件里的 revision 已经对应真实角色库。
