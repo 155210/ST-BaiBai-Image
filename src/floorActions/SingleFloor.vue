@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue';
 import { openMultiRewriteFor } from '@/rewriteHint/floorMultiRewrite';
 import { openPassageGenFor } from '@/rewriteHint/floorPassageGen';
-import { floorInfo, isTagRunning, runFloorTag } from './tag';
+import { floorInfo, imagesAfterTag, isTagRunning, runFloorTag } from './tag';
 
 /** fork:批量页「单楼操作」——填楼号,直接做楼层 🎧 里的三件事,不用在聊天里翻到那一楼。 */
 
@@ -52,7 +52,11 @@ async function tag(): Promise<void> {
 
 function passage(): void {
   remember();
-  openPassageGenFor(floor.value);
+  const at = floor.value;
+  openPassageGenFor(at, undefined, outcome => {
+    tick.value++;
+    if (outcome.kind === 'written') void imagesAfterTag(at).finally(() => tick.value++);
+  });
 }
 
 function multi(): void {

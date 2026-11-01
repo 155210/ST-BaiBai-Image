@@ -3,7 +3,7 @@ import { mesToSync } from '@/longChat/dirty';
 import { bindFloorMenu } from '@/floorMenu/menu';
 import { h, render } from 'vue';
 
-import { requestFocusedTags } from '@/autoTag/runner';
+import { requestFocusedTags, type TagRunOutcome } from '@/autoTag/runner';
 import { ensureChatObserver, onChatMutation } from '@/floor/chatObserver';
 import { backendStatus } from '@/generate';
 import { getContext, isAiStoryMessage } from '@/st/context';
@@ -200,7 +200,7 @@ function onActivate(button: HTMLElement): void {
 }
 
 /** 按楼号打开(楼层按钮、批量页「单楼操作」共用);button 给了就在上面转圈。 */
-export function openPassageGenFor(floor: number, button?: HTMLElement): void {
+export function openPassageGenFor(floor: number, button?: HTMLElement, onDone?: (outcome: TagRunOutcome) => void): void {
   const message = Number.isInteger(floor) ? getContext()?.chat?.[floor] : undefined;
   if (!message) {
     toastr.warning('找不到这一楼的消息，请刷新页面后重试', '柏宝绘');
@@ -218,7 +218,9 @@ export function openPassageGenFor(floor: number, button?: HTMLElement): void {
     {
       onSubmit: hint => {
         if (button) setRunning(button, true);
-        void requestFocusedTags(floor, hint, add).finally(() => button && setRunning(button, false));
+        void requestFocusedTags(floor, hint, add)
+          .then(outcome => onDone?.(outcome))
+          .finally(() => button && setRunning(button, false));
       },
     },
     existing,
