@@ -77,6 +77,11 @@ const gapSeconds = ref(Number(readLocal(GAP_KEY, TEXT.defaultGap)) || 0);
 
 watch(gapSeconds, value => writeLocal(GAP_KEY, String(value)));
 
+const FAILS_KEY = `bbi_batch_${props.kind}_max_fails`;
+/** 连续失败几楼暂停;0 = 一直不停。controller 出发时从本地读(savedMaxFails)。 */
+const maxFails = ref(Number(readLocal(FAILS_KEY, '3')) || 0);
+watch(maxFails, value => writeLocal(FAILS_KEY, String(Math.max(0, Math.floor(Number(value) || 0)))));
+
 const THEN_KEY = 'bbi_batch_tag_then_image';
 /** 写 tag:跑完后接着出图(只对写 tag 那块有用)。 */
 const thenImages = ref(readLocal(THEN_KEY, '0') === '1');
@@ -191,6 +196,20 @@ async function start(): Promise<void> {
       />
     </label>
     <p class="bbi-field-hint">{{ TEXT.gapHint }}</p>
+
+    <label class="bbi-num-row">
+      <span class="bbi-field-label">连续失败几楼暂停</span>
+      <input
+        v-model.number="maxFails"
+        class="bbi-input bbi-num"
+        type="number"
+        min="0"
+        max="999"
+        step="1"
+        :disabled="busy"
+      />
+    </label>
+    <p class="bbi-field-hint">填 0 = 一直不停，失败的楼记下来跑完后可以「重试失败的楼」。渠道挂了时会一路失败到底，想停随时点停止。</p>
 
     <label v-if="kind === 'tag'" class="bbi-switch-row">
       <span class="bbi-field-label">写完 tag 接着出图</span>

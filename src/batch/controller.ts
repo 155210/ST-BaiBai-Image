@@ -65,6 +65,17 @@ export function savedGapMs(kind: BatchKind): number {
   return Math.round(Math.min(60, Math.max(0, seconds)) * 1000);
 }
 
+/** 批量页上填的「连续失败几楼暂停」(记在浏览器本地);默认 3,0 = 一直不停。 */
+export function savedMaxFails(kind: BatchKind): number {
+  try {
+    const raw = localStorage.getItem(`bbi_batch_${kind}_max_fails`);
+    if (raw !== null && raw !== '') return Math.max(0, Math.min(999, Math.floor(Number(raw) || 0)));
+  } catch {
+    /* 读不到就用默认 */
+  }
+  return DEFAULT_LOOP_OPTIONS.maxConsecutiveFails;
+}
+
 function currentChatId(): string {
   return getContext()?.getCurrentChatId?.() ?? '';
 }
@@ -216,7 +227,7 @@ async function run(job: BatchJob, gapMs: number): Promise<void> {
         },
       },
       signal,
-      { ...DEFAULT_LOOP_OPTIONS, gapMs },
+      { ...DEFAULT_LOOP_OPTIONS, gapMs, maxConsecutiveFails: savedMaxFails(kind) },
     );
   } catch (error) {
     job.status = 'paused';

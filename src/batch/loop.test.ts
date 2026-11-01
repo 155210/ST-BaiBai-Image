@@ -74,6 +74,14 @@ describe('runBatchLoop', () => {
     expect(job.note).toContain('连续 3 楼失败');
   });
 
+  it('maxConsecutiveFails = 0 never pauses on failures', async () => {
+    const job = createJob('tag', 'chat', [1, 2, 3, 4, 5]);
+    const failed: TagRunOutcome = { kind: 'failed' };
+    await runBatchLoop(job, deps({ runFloor: outcomes({ 1: failed, 2: failed, 3: failed, 4: failed, 5: failed }) }), new AbortController().signal, { ...OPTIONS, maxConsecutiveFails: 0 });
+    expect(job.status).toBe('done');
+    expect(job.fails.map(item => item.floor)).toEqual([1, 2, 3, 4, 5]);
+  });
+
   it('a success resets the consecutive failure count', async () => {
     const job = createJob('tag', 'chat', [1, 2, 3, 4, 5]);
     const failed: TagRunOutcome = { kind: 'failed' };

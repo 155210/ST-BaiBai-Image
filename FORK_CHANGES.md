@@ -189,7 +189,7 @@
 
 ## 本分支自有文件
 
-- `src/batch/`：批量写 tag、批量出图、图片浏览、角色搜索的逻辑
+- `src/batch/`：批量写 tag、批量出图、图片浏览、角色搜索的逻辑（连续失败几楼暂停在批量页可调，填 0 一直不停，记在浏览器里）
 - `src/pages/batch/`：批量页界面
 - `src/floor/slotGenerate.ts`：单张出图（卡片与批量共用）
 - `src/state/backup.ts`、`src/pages/settings/BackupSection.vue`：导出 / 导入设置（含每日出图计数）

@@ -33,7 +33,7 @@ export interface LoopDeps {
 export interface LoopOptions {
   /** 每楼之间的间隔(毫秒)。 */
   gapMs: number;
-  /** 连续失败几楼就暂停。 */
+  /** 连续失败几楼就暂停;0 = 一直不停。 */
   maxConsecutiveFails: number;
   /** 同一楼因后台被打断最多重跑几次。 */
   maxHiddenRetries: number;
@@ -110,7 +110,7 @@ export async function runBatchLoop(
     deps.onProgress?.(job, floor, outcome);
 
     if (outcome.pause) return pause(job, deps, outcome.pause);
-    if (consecutiveFails >= options.maxConsecutiveFails) {
+    if (options.maxConsecutiveFails > 0 && consecutiveFails >= options.maxConsecutiveFails) {
       return pause(job, deps, `连续 ${consecutiveFails} 楼失败，已暂停。检查一下渠道设置，再点继续`);
     }
     if (job.cursor < job.floors.length && options.gapMs > 0) await deps.sleep(options.gapMs, signal);
