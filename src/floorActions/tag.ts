@@ -1,5 +1,7 @@
 import { reactive } from 'vue';
 import { requestFloorTags, requestRegenTags } from '@/autoTag/runner';
+import { imagesReady, needsImage } from '@/batch/controller';
+import { runImageFloor } from '@/batch/imageFloor';
 import { chooseRegen } from '@/rewriteHint/floorPassageGen';
 import { settings } from '@/state/settings';
 import { getContext, isAiStoryMessage } from '@/st/context';
@@ -52,9 +54,32 @@ export async function runFloorTag(floor: number): Promise<boolean> {
   if (info.hasTags && !regen) return false;
   running.add(floor);
   try {
-    await (regen ? requestRegenTags(floor, regen) : requestFloorTags(floor, { replace: info.hasTags }));
+    const outcome = await (regen ? requestRegenTags(floor, regen) : requestFloorTags(floor, { replace: info.hasTags }));
+    if (outcome.kind === 'written') await imagesAfterTag(floor);
   } finally {
     running.delete(floor);
   }
   return true;
+}
+
+/** 批量页「写完 tag 接着出图」的勾(BatchSection.vue 存的同一个键)。 */
+export function thenImagesChecked(): boolean {
+  try {
+    return localStorage.getItem('bbi_batch_tag_then_image') === '1';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 勾了「写完 tag 接着出图」就把这一楼没出的图出掉。
+ * 这一楼正显示在聊天里、又开着「写入 tag 后自动生成」时,卡片自己会出,这里不重复出。
+ */
+export async function imagesAfterTag(floor: number): Promise<void> {
+  if (!thenImagesChecked() || !imagesReady() || !needsImage(floor)) return;
+  const shown = !!document.querySelector(`#chat .mes[mesid="${floor}"]`);
+  if (shown && settings.autoTag.autoGenerate) return;
+  const result = await runImageFloor(floor, new AbortController().signal, 'all');
+  if (result.kind === 'failed') toastr.warning(`第 ${floor} 楼出图失败：${result.reason ?? '没有出图'}`, '柏宝绘');
+  else if (result.kind === 'written') toastr.success(`第 ${floor} 楼的图出好了`, '柏宝绘');
 }

@@ -252,7 +252,7 @@ async function run(job: BatchJob, gapMs: number): Promise<void> {
 }
 
 /** 出图渠道能不能用;不能用就只写 tag,跑完由 chainImages 提示原因。 */
-function imagesReady(): boolean {
+export function imagesReady(): boolean {
   return backendStatus().configured;
 }
 
