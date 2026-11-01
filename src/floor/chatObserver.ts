@@ -12,6 +12,9 @@
  * 才动 DOM,别在里面做全量重建。
  */
 
+import { beginFlush, endFlush, noteMutations } from '@/longChat/dirty'; // fork:长聊天只对账变过的楼
+import { flushKey } from '@/longChat/key';
+
 type ChatMutationListener = () => void;
 
 const listeners = new Set<ChatMutationListener>();
@@ -21,6 +24,7 @@ let scheduled = false;
 
 function flush(): void {
   scheduled = false;
+  beginFlush(flushKey()); // fork:长聊天只对账变过的楼
   for (const listener of listeners) {
     // 一个订阅者抛异常不能连坐其它订阅者(尤其别让它把自愈整条链路带走)
     try {
@@ -29,6 +33,7 @@ function flush(): void {
       console.error('[柏宝绘] #chat 变更回调异常', error);
     }
   }
+  endFlush();
 }
 
 /**
@@ -40,7 +45,8 @@ export function ensureChatObserver(): boolean {
   const chat = document.getElementById('chat');
   if (!chat) return false;
 
-  observer = new MutationObserver(() => {
+  observer = new MutationObserver(records => {
+    noteMutations(records); // fork:长聊天只对账变过的楼
     if (scheduled) return;
     scheduled = true;
     requestAnimationFrame(flush);

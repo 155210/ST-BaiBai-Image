@@ -1,3 +1,4 @@
+import { mesToSync } from '@/longChat/dirty'; // fork:长聊天只看变过的楼
 import { requestFloorTags, requestRegenTags } from '@/autoTag/runner';
 import { chooseRegen } from '@/rewriteHint/floorPassageGen';
 import { ensureChatObserver, onChatMutation } from '@/floor/chatObserver';
@@ -100,7 +101,7 @@ function syncButtons(): void {
   if (!chat) return;
   // 排除角色:该聊天整条自动 tag 链路停用(与柏宝书同名单),手动按钮一并撤掉
   const excluded = isCurrentChatExcluded();
-  for (const mesEl of document.querySelectorAll<HTMLElement>('#chat .mes')) {
+  for (const mesEl of mesToSync()) { // fork:长聊天只看变过的楼
     const extra = mesEl.querySelector('.extraMesButtons');
     if (!extra) continue;
     const floor = Number(mesEl.getAttribute('mesid'));

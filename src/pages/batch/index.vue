@@ -10,6 +10,7 @@ import BatchSection from './BatchSection.vue';
 import RangeField from './RangeField.vue';
 import GalleryTab from './GalleryTab.vue';
 import SearchTab from './SearchTab.vue';
+import SingleFloor from '@/floorActions/SingleFloor.vue';
 
 /**
  * 批量页:三个标签。批量生成和图片浏览各有自己的楼层范围(批量跑着时照样能翻图),角色搜索搜整个聊天。
@@ -125,6 +126,10 @@ onUnmounted(() => {
       <p class="bbi-field-hint">
         填 1 就是每楼都要。填 3 就是范围内第 1、4、7… 个 AI 楼写 tag 和出图，其余的楼跳过。
       </p>
+
+      <Collapsible title="单楼操作" :open="false">
+        <SingleFloor :chat-tick="chatTick" :last-floor="lastFloor" />
+      </Collapsible>
 
       <BatchSection kind="tag" :chat-tick="chatTick" />
       <BatchSection kind="image" :chat-tick="chatTick" />
