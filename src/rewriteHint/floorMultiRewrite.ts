@@ -1,3 +1,4 @@
+import { mesToSync } from '@/longChat/dirty';
 import { h, render } from 'vue';
 
 import { requestManySlotTags } from '@/autoTag/runner';
@@ -84,7 +85,11 @@ function openDialog(floor: number, items: SlotItem[], onSubmit: (edits: SlotEdit
 
 function onActivate(button: HTMLElement): void {
   if (button.dataset.running === '1') return;
-  const floor = Number(button.closest('.mes')?.getAttribute('mesid'));
+  openMultiRewriteFor(Number(button.closest('.mes')?.getAttribute('mesid')), button);
+}
+
+/** 按楼号打开(楼层按钮、批量页「单楼操作」共用);button 给了就在上面转圈。 */
+export function openMultiRewriteFor(floor: number, button?: HTMLElement): void {
   const message = Number.isInteger(floor) ? getContext()?.chat?.[floor] : undefined;
   if (!message) {
     toastr.warning('找不到这一楼的消息，请刷新页面后重试', '柏宝绘');
@@ -107,8 +112,8 @@ function onActivate(button: HTMLElement): void {
   }
   openDialog(floor, items, (edits, noNl) => {
     items.forEach((item, i) => setSlotNoNl({ ...at, seq: item.seq }, noNl[i] ?? false));
-    setRunning(button, true);
-    void requestManySlotTags(floor, edits).finally(() => setRunning(button, false));
+    if (button) setRunning(button, true);
+    void requestManySlotTags(floor, edits).finally(() => button && setRunning(button, false));
   });
 }
 
@@ -134,7 +139,7 @@ function syncButtons(): void {
   const chat = getContext()?.chat;
   if (!chat) return;
   const excluded = isCurrentChatExcluded();
-  for (const mesEl of document.querySelectorAll<HTMLElement>('#chat .mes')) {
+  for (const mesEl of mesToSync()) { // fork:长聊天只看变过的楼
     const extra = mesEl.querySelector('.extraMesButtons');
     if (!extra) continue;
     const floor = Number(mesEl.getAttribute('mesid'));

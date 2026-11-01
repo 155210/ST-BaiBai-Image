@@ -1,3 +1,4 @@
+import { mesToSync } from '@/longChat/dirty';
 import { ensureChatObserver, onChatMutation } from '@/floor/chatObserver';
 import { isCurrentChatExcluded } from '@/state/settings';
 import { getContext, isAiStoryMessage } from '@/st/context';
@@ -157,7 +158,7 @@ function syncButtons(): void {
   const chat = getContext()?.chat;
   if (!chat) return;
   const excluded = isCurrentChatExcluded();
-  for (const mesEl of document.querySelectorAll<HTMLElement>('#chat .mes')) {
+  for (const mesEl of mesToSync()) { // fork:长聊天只看变过的楼
     const extra = mesEl.querySelector('.extraMesButtons');
     if (!extra) continue;
     const floor = Number(mesEl.getAttribute('mesid'));

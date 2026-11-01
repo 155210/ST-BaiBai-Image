@@ -1,3 +1,5 @@
+import { bindLongChatRender } from '@/longChat/render';
+import { mesToSync } from '@/longChat/dirty';
 import { bindFloorMenu } from '@/floorMenu/menu';
 import { h, render } from 'vue';
 
@@ -194,7 +196,11 @@ export function openPassageGenDialog(floor: number, handlers: DialogHandlers, ex
 
 function onActivate(button: HTMLElement): void {
   if (button.dataset.running === '1') return;
-  const floor = Number(button.closest('.mes')?.getAttribute('mesid'));
+  openPassageGenFor(Number(button.closest('.mes')?.getAttribute('mesid')), button);
+}
+
+/** 按楼号打开(楼层按钮、批量页「单楼操作」共用);button 给了就在上面转圈。 */
+export function openPassageGenFor(floor: number, button?: HTMLElement): void {
   const message = Number.isInteger(floor) ? getContext()?.chat?.[floor] : undefined;
   if (!message) {
     toastr.warning('找不到这一楼的消息，请刷新页面后重试', '柏宝绘');
@@ -211,8 +217,8 @@ function onActivate(button: HTMLElement): void {
     floor,
     {
       onSubmit: hint => {
-        setRunning(button, true);
-        void requestFocusedTags(floor, hint, add).finally(() => setRunning(button, false));
+        if (button) setRunning(button, true);
+        void requestFocusedTags(floor, hint, add).finally(() => button && setRunning(button, false));
       },
     },
     existing,
@@ -260,7 +266,7 @@ function syncButtons(): void {
   const chat = getContext()?.chat;
   if (!chat) return;
   const excluded = isCurrentChatExcluded();
-  for (const mesEl of document.querySelectorAll<HTMLElement>('#chat .mes')) {
+  for (const mesEl of mesToSync()) { // fork:长聊天只看变过的楼
     const extra = mesEl.querySelector('.extraMesButtons');
     if (!extra) continue;
     const floor = Number(mesEl.getAttribute('mesid'));
@@ -284,5 +290,6 @@ export function bindPassageGenButtons(): boolean {
   syncButtons();
   bindMultiRewriteButtons();
   bindFloorMenu();
+  bindLongChatRender();
   return true;
 }
