@@ -16,12 +16,14 @@ function read(): string {
     return '';
   }
 }
-const text = ref(read());
+/** type=number 的输入框 Vue 会给数字,空着时是空串;统一按字符串处理。 */
+const text = ref<string | number>(read());
+const raw = computed(() => String(text.value ?? '').trim());
 const busy = ref(false);
 /** 点完按钮后刷新一下信息(写 tag 是异步的,chat 本身不是响应式)。 */
 const tick = ref(0);
 
-const floor = computed(() => (text.value.trim() === '' ? NaN : Number(text.value)));
+const floor = computed(() => (raw.value === '' ? NaN : Number(raw.value)));
 const info = computed(() => {
   void props.chatTick;
   void tick.value;
@@ -31,7 +33,7 @@ const info = computed(() => {
 
 function remember(): void {
   try {
-    localStorage.setItem(KEY, text.value.trim());
+    localStorage.setItem(KEY, raw.value);
   } catch {
     /* 记不住就算了 */
   }
