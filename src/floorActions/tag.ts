@@ -1,3 +1,4 @@
+import { reactive } from 'vue';
 import { requestFloorTags, requestRegenTags } from '@/autoTag/runner';
 import { chooseRegen } from '@/rewriteHint/floorPassageGen';
 import { settings } from '@/state/settings';
@@ -28,7 +29,8 @@ export function floorInfo(floor: number): FloorInfo {
   return { ok: true, reason: '', hasTags: hasImageTagTrace(mes), images: parseImageTags(mes).length };
 }
 
-const running = new Set<number>();
+/** 正在写 tag 的楼(响应式:界面按楼号显示「正在写」,别的楼照样能点)。 */
+const running = reactive(new Set<number>());
 
 export function isTagRunning(floor: number): boolean {
   return running.has(floor);

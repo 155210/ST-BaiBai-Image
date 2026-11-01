@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue';
 import { openMultiRewriteFor } from '@/rewriteHint/floorMultiRewrite';
 import { openPassageGenFor } from '@/rewriteHint/floorPassageGen';
-import { floorInfo, runFloorTag } from './tag';
+import { floorInfo, isTagRunning, runFloorTag } from './tag';
 
 /** fork:批量页「单楼操作」——填楼号,直接做楼层 🎧 里的三件事,不用在聊天里翻到那一楼。 */
 
@@ -19,7 +19,6 @@ function read(): string {
 /** type=number 的输入框 Vue 会给数字,空着时是空串;统一按字符串处理。 */
 const text = ref<string | number>(read());
 const raw = computed(() => String(text.value ?? '').trim());
-const busy = ref(false);
 /** 点完按钮后刷新一下信息(写 tag 是异步的,chat 本身不是响应式)。 */
 const tick = ref(0);
 
@@ -39,13 +38,14 @@ function remember(): void {
   }
 }
 
+/** 只锁正在写的这一楼;换个楼号就能接着点,几楼可以同时写。 */
+const busy = computed(() => !Number.isNaN(floor.value) && isTagRunning(floor.value));
+
 async function tag(): Promise<void> {
   remember();
-  busy.value = true;
   try {
     await runFloorTag(floor.value);
   } finally {
-    busy.value = false;
     tick.value++;
   }
 }
