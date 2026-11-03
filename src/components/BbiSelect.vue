@@ -63,8 +63,13 @@ function openMenu() {
   // 菜单是视口级 fixed,不随内容滚动;滚动/缩放时直接关掉,比重算位置干净。
   // (菜单最高 240px、选项就几个,自身几乎不会出现内部滚动,故不排除菜单内滚动。)
   document.addEventListener('scroll', closeOnViewportChange, true);
+  // fork:面板在 shadow root 里,里面的滚动事件到不了 document,得在 root 上也听
+  scrollRoot = el.getRootNode() === document ? null : el.getRootNode();
+  scrollRoot?.addEventListener('scroll', closeOnViewportChange, true);
   window.addEventListener('resize', closeOnViewportChange);
 }
+
+let scrollRoot: Node | null = null;
 
 function closeMenu(restoreFocus = false) {
   if (!open.value) return;
@@ -72,12 +77,28 @@ function closeMenu(restoreFocus = false) {
   document.removeEventListener('mousedown', onDocMousedown, true);
   document.removeEventListener('keydown', onDocKeydown, true);
   document.removeEventListener('scroll', closeOnViewportChange, true);
+  scrollRoot?.removeEventListener('scroll', closeOnViewportChange, true);
+  scrollRoot = null;
   window.removeEventListener('resize', closeOnViewportChange);
   if (restoreFocus) trigger.value?.focus();
 }
 
-function closeOnViewportChange() {
+function closeOnViewportChange(event?: Event) {
+  // fork:只有触发器所在的滚动容器(或整页)滚了才关。出图时聊天、流式面板等别处在滚,
+  // 以前一律关掉,菜单点开就缩回。
+  if (event?.type === 'scroll' && !scrollMovesTrigger(event.target)) return;
   closeMenu();
+}
+
+/** 滚动的是不是触发器的祖先(穿过 shadow root 往上找)。 */
+function scrollMovesTrigger(target: EventTarget | null): boolean {
+  if (!target || target === document || target === window) return true;
+  let node: Node | null = trigger.value;
+  while (node) {
+    if (node === target) return true;
+    node = node.parentNode ?? (node instanceof ShadowRoot ? node.host : null);
+  }
+  return false;
 }
 
 function toggle() {

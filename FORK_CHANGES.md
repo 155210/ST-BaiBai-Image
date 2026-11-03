@@ -170,6 +170,7 @@
 | src/floor/chatObserver.ts | endFlush(); | 同上 | 长聊天卡顿 |
 | src/floor/actionButton.ts | import { mesToSync } from '@/longChat/dirty'; | 同上：写 tag 按钮对账 | 长聊天卡顿 |
 | src/floor/actionButton.ts | for (const mesEl of mesToSync()) { // fork:长聊天只看变过的楼 | 同上 | 长聊天卡顿 |
+| src/components/BbiSelect.vue | function scrollMovesTrigger( | 下拉框只在自己所在的区域滚动时才收起，出图时别处滚动不再把它关掉 | 下拉框自己缩回 |
 | src/autoTag/runner.ts | import { fixPlanWithDict, tagHintFor, withTagHint } from '@/tagDict/autoTag'; | 引入标签库 | 标签库 |
 | src/autoTag/runner.ts | // fork:标签库参考 | 写 tag 前把正文里认识的中文词「中文=英文」附给 AI | 标签库 |
 | src/autoTag/runner.ts | const builtMessages = await buildAutoTagMessages( | 同上：先拼好消息再接参考 | 标签库 |
