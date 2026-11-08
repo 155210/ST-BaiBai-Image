@@ -13,8 +13,8 @@
 
 | 文件 | 标记 | 作用 | PR |
 | --- | --- | --- | --- |
-| src/update.ts | raw.githubusercontent.com/155210/ST-BaiBai-Image | 检查更新看本仓库 | #1 |
-| manifest.json | "homePage": "https://github.com/155210/ST-BaiBai-Image" | 插件主页指向本仓库 | #1 |
+| src/update.ts | gitlab.com/api/v4/projects/blank3181345%2Fst-baibai-image | 检查更新看本仓库(GitLab) | #1 |
+| manifest.json | "homePage": "https://gitlab.com/blank3181345/st-baibai-image" | 插件主页指向本仓库(GitLab) | #1 |
 | README.md | 本仓库是 [baibai-git/ST-BaiBai-Image] | 说明是维护分支、版本号规则 | #1 |
 | src/autoTag/prompt.test.ts | nvwa_standalone_core | 年龄限定断言跳过默认破限核心 | #1 |
 | src/pages/registry.ts | id: 'batch', label: '批量' | 批量页入口 | #2 |

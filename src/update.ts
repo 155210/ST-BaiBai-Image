@@ -1,5 +1,5 @@
 /**
- * 检测更新:对比本地版本与远端 GitHub 仓库 manifest.json 的版本,
+ * 检测更新:对比本地版本与远端 GitLab 仓库 manifest.json 的版本,
  * 有新版本则提示用户,确认后走 ST 扩展更新 API 自动更新并刷新。
  */
 
@@ -8,7 +8,7 @@ import { PLUGIN_VERSION } from '@/version';
 import { reactive } from 'vue';
 
 const CURRENT_VERSION = PLUGIN_VERSION;
-const REMOTE_MANIFEST_URL = 'https://raw.githubusercontent.com/155210/ST-BaiBai-Image/main/manifest.json';
+const REMOTE_MANIFEST_URL = 'https://gitlab.com/api/v4/projects/blank3181345%2Fst-baibai-image/repository/files/manifest.json/raw?ref=main';
 
 export const updateState = reactive({
   current: CURRENT_VERSION,
