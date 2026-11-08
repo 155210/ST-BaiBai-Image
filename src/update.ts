@@ -8,7 +8,7 @@ import { PLUGIN_VERSION } from '@/version';
 import { reactive } from 'vue';
 
 const CURRENT_VERSION = PLUGIN_VERSION;
-const REMOTE_MANIFEST_URL = 'https://gitlab.com/api/v4/projects/blank3181345%2Fst-baibai-image/repository/files/manifest.json/raw?ref=main';
+const REMOTE_MANIFEST_URL = 'https://gitlab.com/api/v4/projects/88672656/repository/files/manifest.json/raw?ref=main';
 
 export const updateState = reactive({
   current: CURRENT_VERSION,

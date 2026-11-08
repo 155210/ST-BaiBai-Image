@@ -58,7 +58,7 @@
 在 SillyTavern 的「扩展 → 安装扩展」里填入本仓库地址即可：
 
 ```
-https://gitlab.com/blank3181345/st-baibai-image
+https://gitlab.com/1151032/st-baibai-image
 ```
 
 > 本仓库是 [baibai-git/ST-BaiBai-Image](https://github.com/baibai-git/ST-BaiBai-Image) 的维护分支。设置页的「检查更新」看的是本仓库；从原仓库装的用户点更新只会拉到原仓库的版本。
