@@ -3,10 +3,10 @@
   "loading_order": 100,
   "requires": [],
   "optional": [],
-  "js": "dist/index.js?ver=0.3.2.59",
+  "js": "dist/index.js?ver=0.3.2.60",
   "author": "柏柏",
-  "version": "0.3.2.59",
-  "homePage": "https://gitlab.com/blank3181345/st-baibai-image",
+  "version": "0.3.2.60",
+  "homePage": "https://gitlab.com/1151032/st-baibai-image",
   "auto_update": false,
   "minimum_client_version": "1.12.13"
 }
