@@ -1,6 +1,6 @@
 import { formatPromptText, parseImageTagContent, parseImageTags, replaceImageTagAt } from '@/st/imageTagRegex';
 
-import { normalizeRewriteHint } from './hint';
+import { MAX_REWRITE_HINT, normalizeRewriteHint } from './hint';
 import { clearPendingMove } from './move';
 
 /**
@@ -17,11 +17,29 @@ export interface SlotEdit {
   hint: string;
 }
 
+/** 单张要求 + 「每张都要改」的共同要求拼起来,所以上限是单条的两倍多一点。 */
+const MAX_SLOT_HINT = MAX_REWRITE_HINT * 2 + 20;
+
+/**
+ * 弹窗里每张的要求 + 底下「每张都要改」的共同要求,拼成交给 runner 的列表。
+ * 共同要求写了 = 每张都改(单张留空也改);没写 = 只改单独写了要求的那几张。
+ */
+export function combineSlotEdits(items: { seq: number; hint: string }[], common: string): SlotEdit[] {
+  const shared = normalizeRewriteHint(common);
+  return items
+    .map(item => {
+      const own = normalizeRewriteHint(item.hint);
+      const hint = own && shared ? `${own}\n另外（每张都要）：${shared}` : own || shared;
+      return { seq: item.seq, hint };
+    })
+    .filter(e => e.hint);
+}
+
 /** 弹窗交来的要求整理一遍:去掉空的、重复的,按楼内顺序排。 */
 export function normalizeSlotEdits(edits: SlotEdit[]): SlotEdit[] {
   const seen = new Set<number>();
   return edits
-    .map(e => ({ seq: e.seq, hint: normalizeRewriteHint(e.hint) }))
+    .map(e => ({ seq: e.seq, hint: normalizeRewriteHint(e.hint, MAX_SLOT_HINT) }))
     .filter(e => e.hint && !seen.has(e.seq) && seen.add(e.seq))
     .sort((a, b) => a.seq - b.seq);
 }

@@ -5,7 +5,7 @@ import { requestManySlotTags } from '@/autoTag/runner';
 import { onChatMutation } from '@/floor/chatObserver';
 import { backendStatus } from '@/generate';
 import { getContext, isAiStoryMessage } from '@/st/context';
-import { formatPromptText, parseImageTagContent, parseImageTags } from '@/st/imageTagRegex';
+import { parseImageTags } from '@/st/imageTagRegex';
 import { isCurrentChatExcluded, settings } from '@/state/settings';
 
 import { slotThumb } from './floorPassageGen';
@@ -29,7 +29,6 @@ let closeCurrent: (() => void) | null = null;
 
 export interface SlotItem {
   seq: number;
-  prompt: string;
   src?: string;
   /** 这张出图不发自然语言(nlSwitch/perSlot.ts) */
   noNl: boolean;
@@ -100,9 +99,8 @@ export function openMultiRewriteFor(floor: number, button?: HTMLElement): void {
     return;
   }
   const at = { chatId: getContext()?.getCurrentChatId?.() ?? '', messageId: floor, swipeId: message.swipe_id ?? 0 };
-  const items = parseImageTags(message.mes ?? '').map((raw, seq) => ({
+  const items = parseImageTags(message.mes ?? '').map((_raw, seq) => ({
     seq,
-    prompt: formatPromptText(parseImageTagContent(raw)).trim(),
     src: slotThumb(floor, seq),
     noNl: slotNoNl({ ...at, seq }),
   }));

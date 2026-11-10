@@ -13,12 +13,12 @@
 export const MAX_REWRITE_HINT = 500;
 
 /** 归一:去首尾空白、折叠多余空行、截断。返回空串 = 没有附加要求。 */
-export function normalizeRewriteHint(raw: string | null | undefined): string {
+export function normalizeRewriteHint(raw: string | null | undefined, max = MAX_REWRITE_HINT): string {
   const text = String(raw ?? '')
     .replace(/\r\n?/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
-  return text.length > MAX_REWRITE_HINT ? text.slice(0, MAX_REWRITE_HINT) : text;
+  return text.length > max ? text.slice(0, max) : text;
 }
 
 /**
