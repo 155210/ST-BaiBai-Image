@@ -1,7 +1,7 @@
 import type { TagRunOutcome } from '@/autoTag/runner';
 import type { BatchJob } from '@/batch/jobStore';
 import { effectiveOrientation } from '@/backends/size';
-import { cancelGen, slotKey } from '@/floor/genState';
+import { cancelGen, getGenRecord, slotKey } from '@/floor/genState';
 import { isImageMissing } from '@/floor/missingImages';
 import { generateSlot, type SlotJob } from '@/floor/slotGenerate';
 import { historyEntries, promptHash, readStore, type BbiImageEntry } from '@/floor/storage';
@@ -79,16 +79,24 @@ export function cancelCurrentImage(): void {
   if (current) cancelGen(current);
 }
 
+/** 这一张正在排队 / 生成(卡片或别处发起的):再发一次只会把在途的那次掐掉重来。 */
+function slotBusy(chatId: string, floor: number, swipeId: number, seq: number): boolean {
+  const phase = getGenRecord(slotKey(chatId, floor, swipeId, seq))?.phase;
+  return phase === 'queued' || phase === 'generating';
+}
+
+/** only 给了就只出这几张(楼内序号);正在出的那几张跳过,不重复发。 */
 export async function runImageFloor(
   floor: number,
   signal: AbortSignal,
   mode: ImageMode = 'all',
+  only?: number[],
 ): Promise<TagRunOutcome> {
   const context = getContext();
   const chatId = context?.getCurrentChatId?.() ?? '';
   const message = context?.chat?.[floor];
   if (!context || !chatId || !message) return { kind: 'skipped' };
-  const seqs = pendingImageSeqs(message, mode);
+  const seqs = pendingImageSeqs(message, mode).filter(seq => !only || only.includes(seq));
   if (!seqs.length) return { kind: 'skipped' };
 
   let saved = 0;
@@ -101,6 +109,7 @@ export async function runImageFloor(
     }
     const job = slotJob(chatId, floor, now, seq);
     if (!job) continue;
+    if (slotBusy(chatId, floor, job.swipeId, seq)) continue;
     current = slotKey(chatId, floor, job.swipeId, seq);
     const result = await generateSlot(job);
     current = null;

@@ -61,7 +61,12 @@ function passage(): void {
 
 function multi(): void {
   remember();
-  openMultiRewriteFor(floor.value);
+  const at = floor.value;
+  // 这一楼多半没显示在聊天里,没有卡片来出图:改完在这里接着出
+  openMultiRewriteFor(at, undefined, outcome => {
+    tick.value++;
+    if (outcome.kind === 'written') void imagesAfterTag(at).finally(() => tick.value++);
+  });
 }
 </script>
 

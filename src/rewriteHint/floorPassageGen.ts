@@ -18,7 +18,7 @@ import { bindMultiRewriteButtons } from './floorMultiRewrite';
 import { drawnPassages } from './sources';
 import { floorPassages, passageGroupsHint } from './passage';
 import PassageGenDialog from './PassageGenDialog.vue';
-import { clearDraft, draftFrom, draftPick, readDraft, saveDraft } from './pickDraft';
+import { clearDraft, draftFrom, draftPick, draftStale, readDraft, saveDraft, textMark } from './pickDraft';
 
 /**
  * 楼层上的「挑一段生图」(本 fork 独有)。
@@ -120,8 +120,16 @@ export function openPassageGenDialog(floor: number, handlers: DialogHandlers, ex
   const regen = regenMax !== undefined;
   const failed = restorablePick(lastPicks.get(key), text, regen, passages.map(p => p.id));
   // 上次没写成的优先;否则看有没有点「保存」存下的半截选择
-  const saved = failed ? undefined : draftPick(readDraft(key), regen, passages);
+  let stored = readDraft(key);
+  if (draftStale(stored, text)) {
+    // 上次点了「生成」而且已经写进正文了:存档作废
+    clearDraft(key);
+    stored = undefined;
+  }
+  const saved = failed ? undefined : draftPick(stored, regen, passages);
   const initial = failed ?? saved;
+  // 点过「生成」但正文没变 = 没写成(失败,或者页面中途被杀了)
+  const unsent = !failed && !!saved && stored?.sent === undefined;
   const marks = existing > 0 ? existingImageMarks(floor) : {};
   const drawn = existing > 0 ? drawnPassages(floor) : {};
   const container = document.createElement('div');
@@ -158,7 +166,7 @@ export function openPassageGenDialog(floor: number, handlers: DialogHandlers, ex
         marks,
         drawn,
         initial,
-        initialKind: failed ? 'failed' : saved ? 'draft' : undefined,
+        initialKind: unsent ? 'draft' : initial ? 'failed' : undefined,
         configured: backendStatus().configured,
         closing,
         onClose: close,
@@ -167,7 +175,8 @@ export function openPassageGenDialog(floor: number, handlers: DialogHandlers, ex
           const chosen = groups.map(ids => passages.filter(p => ids.includes(p.id)));
           // 段落那几行不截断(分组多时会超过要求的字数上限),只截用户另写的要求
           const hint = [passageGroupsHint(chosen), normalizeRewriteHint(extra)].filter(s => s.trim()).join('\n');
-          clearDraft(key);
+          // 存档留到写成为止(下次打开时正文变了才作废):等 AI 的时候页面被杀也不丢
+          saveDraft(key, { ...draftFrom(regen, groups, extra, passages), sent: textMark(text) });
           lastPicks.delete(key);
           lastPicks.set(key, { regen, groups, extra, text });
           while (lastPicks.size > MAX_PICKS) lastPicks.delete(lastPicks.keys().next().value as string);

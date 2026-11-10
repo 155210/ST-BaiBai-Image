@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { clearDraft, draftFrom, draftPick, readDraft, saveDraft } from './pickDraft';
+import { clearDraft, draftFrom, draftPick, draftStale, readDraft, saveDraft, textMark } from './pickDraft';
 
 const passages = [
   { id: 'P1', text: '甲' },
@@ -51,5 +51,16 @@ describe('挑段落保存半截选择', () => {
     expect(readDraft('k0')).toBeUndefined();
     expect(readDraft('k1')).toBeUndefined();
     expect(readDraft('k2')).toBeDefined();
+  });
+
+  it('点了生成的存档：正文没变还能接着发，正文变了就作废', () => {
+    const draft = { ...draftFrom(false, [['P1']], '要求', passages), sent: textMark('甲\n乙\n丙') };
+    saveDraft('k', draft);
+    expect(draftStale(readDraft('k'), '甲\n乙\n丙')).toBe(false);
+    expect(draftPick(readDraft('k'), false, passages)).toEqual({ groups: [['P1']], extra: '要求' });
+    expect(draftStale(readDraft('k'), '甲\n<bbi_image>1girl</bbi_image>\n乙\n丙')).toBe(true);
+    // 没点过生成的半截选择不看正文
+    expect(draftStale(draftFrom(false, [['P1']], '', passages), '随便')).toBe(false);
+    expect(draftStale(undefined, '随便')).toBe(false);
   });
 });

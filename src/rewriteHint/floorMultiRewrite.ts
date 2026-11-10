@@ -1,7 +1,7 @@
 import { mesToSync } from '@/longChat/dirty';
 import { h, render } from 'vue';
 
-import { requestManySlotTags } from '@/autoTag/runner';
+import { requestManySlotTags, type TagRunOutcome } from '@/autoTag/runner';
 import { onChatMutation } from '@/floor/chatObserver';
 import { backendStatus } from '@/generate';
 import { getContext, isAiStoryMessage } from '@/st/context';
@@ -12,6 +12,7 @@ import { slotThumb } from './floorPassageGen';
 import MultiRewriteDialog from './MultiRewriteDialog.vue';
 import { setSlotNoNl, slotNoNl } from '@/nlSwitch/perSlot';
 import type { SlotEdit } from './multiRewrite';
+import { textBeforeImage, type ImageContextText } from '@/imageContext/before';
 
 /**
  * 楼层「⋯」里的「一起改这层的图」(本 fork 独有):列出本楼每张图,各写修改要求,
@@ -32,6 +33,8 @@ export interface SlotItem {
   src?: string;
   /** 这张出图不发自然语言(nlSwitch/perSlot.ts) */
   noNl: boolean;
+  /** 这张图前面的几段正文(和图片浏览大图下面那块同一份),对照着写修改要求 */
+  context?: ImageContextText | null;
 }
 
 function setRunning(button: HTMLElement, running: boolean): void {
@@ -88,7 +91,7 @@ function onActivate(button: HTMLElement): void {
 }
 
 /** 按楼号打开(楼层按钮、批量页「单楼操作」共用);button 给了就在上面转圈。 */
-export function openMultiRewriteFor(floor: number, button?: HTMLElement): void {
+export function openMultiRewriteFor(floor: number, button?: HTMLElement, onDone?: (outcome: TagRunOutcome) => void): void {
   const message = Number.isInteger(floor) ? getContext()?.chat?.[floor] : undefined;
   if (!message) {
     toastr.warning('找不到这一楼的消息，请刷新页面后重试', '柏宝绘');
@@ -103,6 +106,7 @@ export function openMultiRewriteFor(floor: number, button?: HTMLElement): void {
     seq,
     src: slotThumb(floor, seq),
     noNl: slotNoNl({ ...at, seq }),
+    context: textBeforeImage(message.mes ?? '', seq, settings.excludes.customStripTags),
   }));
   if (!items.length) {
     toastr.info('本楼还没有图', '柏宝绘');
@@ -111,7 +115,9 @@ export function openMultiRewriteFor(floor: number, button?: HTMLElement): void {
   openDialog(floor, items, (edits, noNl) => {
     items.forEach((item, i) => setSlotNoNl({ ...at, seq: item.seq }, noNl[i] ?? false));
     if (button) setRunning(button, true);
-    void requestManySlotTags(floor, edits).finally(() => button && setRunning(button, false));
+    void requestManySlotTags(floor, edits)
+      .then(outcome => onDone?.(outcome))
+      .finally(() => button && setRunning(button, false));
   });
 }
 

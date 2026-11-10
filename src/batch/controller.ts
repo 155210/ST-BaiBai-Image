@@ -236,7 +236,8 @@ async function run(job: BatchJob, gapMs: number): Promise<void> {
     console.error(`[柏宝绘] ${LABEL[kind]}出错`, error);
   } finally {
     batchState.currentFloor = null;
-    batchState.jobs[kind] = { ...job };
+    // 中途切了聊天(因此暂停):页面上换成现在这个聊天自己的记录,不留着上一个聊天的进度
+    batchState.jobs[kind] = currentChatId() === job.chatId ? { ...job } : loadJob(kind, currentChatId());
     batchState.running = null;
     controller = null;
     releaseWakeLock();

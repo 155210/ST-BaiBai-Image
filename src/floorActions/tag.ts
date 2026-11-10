@@ -2,6 +2,7 @@ import { reactive } from 'vue';
 import { requestFloorTags, requestRegenTags } from '@/autoTag/runner';
 import { imagesReady, needsImage } from '@/batch/controller';
 import { runImageFloor } from '@/batch/imageFloor';
+import { consumeAutoGenerate } from '@/floor/autoGenerate';
 import { chooseRegen } from '@/rewriteHint/floorPassageGen';
 import { settings } from '@/state/settings';
 import { getContext, isAiStoryMessage } from '@/st/context';
@@ -72,14 +73,40 @@ export function thenImagesChecked(): boolean {
 }
 
 /**
- * 勾了「写完 tag 接着出图」就把这一楼没出的图出掉。
- * 这一楼正显示在聊天里、又开着「写入 tag 后自动生成」时,卡片自己会出,这里不重复出。
+ * 取走这一楼(当前 swipe)还挂着的出图标记,返回其中「一定要出」(force)的那几张的序号。
+ * 楼没显示在聊天里时没有卡片来认领标记:留着它,用户日后翻到这一楼会突然再出一遍。
+ */
+function takeMarks(floor: number): number[] {
+  const context = getContext();
+  const chatId = context?.getCurrentChatId?.() ?? '';
+  const message = context?.chat?.[floor];
+  if (!chatId || !message) return [];
+  const forced: number[] = [];
+  parseImageTags(message.mes ?? '').forEach((_tag, seq) => {
+    if (consumeAutoGenerate(chatId, floor, message.swipe_id ?? 0, seq) === 'force') forced.push(seq);
+  });
+  return forced;
+}
+
+/**
+ * 单楼操作写完 tag 之后的出图。
+ *
+ * 这一楼正显示在聊天里:卡片自己会按出图标记出(挑段落 / 一起改一定出,普通写 tag 看
+ * 「写入 tag 后自动生成」),这里只在勾了「写完 tag 接着出图」时把卡片不会出的补上。
+ * 没显示在聊天里(单楼操作多半如此):没有卡片,挑段落 / 一起改的那几张在这里直接出,
+ * 勾了「写完 tag 接着出图」就把这一楼没出的都出掉;出图标记一并取走,免得以后翻到这楼重复出。
  */
 export async function imagesAfterTag(floor: number): Promise<void> {
-  if (!thenImagesChecked() || !imagesReady() || !needsImage(floor)) return;
   const shown = !!document.querySelector(`#chat .mes[mesid="${floor}"]`);
-  if (shown && settings.autoTag.autoGenerate) return;
-  const result = await runImageFloor(floor, new AbortController().signal, 'all');
+  const forced = shown ? [] : takeMarks(floor);
+  const all = thenImagesChecked() && !(shown && settings.autoTag.autoGenerate);
+  if (!all && !forced.length) return;
+  if (!imagesReady()) {
+    if (forced.length) toastr.warning('提示词写好了，但出图渠道还没配好，没有出图', '柏宝绘');
+    return;
+  }
+  if (!needsImage(floor)) return;
+  const result = await runImageFloor(floor, new AbortController().signal, 'all', all ? undefined : forced);
   if (result.kind === 'failed') toastr.warning(`第 ${floor} 楼出图失败：${result.reason ?? '没有出图'}`, '柏宝绘');
   else if (result.kind === 'written') toastr.success(`第 ${floor} 楼的图出好了`, '柏宝绘');
 }
