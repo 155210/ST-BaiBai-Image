@@ -367,18 +367,26 @@ export async function readSseContent(resp: Response, onChunk?: (piece: string) =
   let buf = '';
   let out = '';
   let reasoningOut = '';
+  // fork:开了流式但上游回的是普通 JSON(一行 data: 都没有)时整段留着,读完当非流式解析
+  let sawData = false;
+  let raw = '';
   for (; ;) {
     const { done, value } = await reader.read();
     if (done) break;
-    buf += decoder.decode(value, { stream: true });
+    const text = decoder.decode(value, { stream: true });
+    if (!sawData) raw += text;
+    buf += text;
     // 按行解析,保留最后一段不完整的行到下次
     const lines = buf.split('\n');
     buf = lines.pop() ?? '';
     emit(lines);
   }
   // fork:流末尾没有换行的最后一行也要解析(有的代理不补结尾换行)
-  buf += decoder.decode();
+  const rest = decoder.decode();
+  if (!sawData) raw += rest;
+  buf += rest;
   emit([buf]);
+  if (!sawData) return plainJsonContent(raw, onChunk);
   return out.trim() || reasoningOut.trim();
 
   function emit(lines: string[]): void {
@@ -386,6 +394,8 @@ export async function readSseContent(resp: Response, onChunk?: (piece: string) =
     for (const line of lines) {
       const t = line.trim();
       if (!t || !t.startsWith('data:')) continue;
+      sawData = true;
+      raw = '';
       const payload = t.slice(5).trim();
       if (payload === '[DONE]') continue;
       try {
@@ -407,6 +417,20 @@ export async function readSseContent(resp: Response, onChunk?: (piece: string) =
     // fork:只有真出了字才算「有新内容」;心跳/注释行/空 delta 不给无响应计时续命
     if (chunkText) onChunk?.(chunkText);
   }
+}
+
+/** fork:流式请求拿到的整段不是 SSE——有的中转不支持流式,直接回一份普通 JSON。按非流式的口径取内容。 */
+function plainJsonContent(raw: string, onChunk?: (piece: string) => void): string {
+  let data: any;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return '';
+  }
+  if (data?.error) throw new ApiError(data.error.message || (typeof data.error === 'string' ? data.error : '副 API 返回错误'));
+  const content = extractContent(data);
+  if (content) onChunk?.(content);
+  return content;
 }
 
 /** 把可能是 string / content-parts 数组 / 其他类型的值转成文本;非字符串成分一律丢弃。 */

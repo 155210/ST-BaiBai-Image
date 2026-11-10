@@ -10,7 +10,7 @@ import { combineSlotEdits, type SlotEdit } from './multiRewrite';
 
 /**
  * 「一起改这层的图」弹窗(floorMultiRewrite.ts 命令式挂载,纪律同 PromptEditor:状态走 props/emit)。
- * 每张一张大图 + 一个输入框,写了要求的才改,留空的不动;底下「每张都要改」写了就每张都改。
+ * 每张一张图 + 图前面的几段正文 + 一个输入框,写了要求的才改,留空的不动;底下「每张都要改」写了就每张都改。
  */
 const props = defineProps<{
   floor: number;
@@ -67,6 +67,11 @@ onBeforeUnmount(() => {
           <span class="bbi-multi-rewrite__no">第 {{ item.seq + 1 }} 张</span>
           <img v-if="item.src" class="bbi-multi-rewrite__img" :src="item.src" :alt="`第 ${item.seq + 1} 张`" loading="lazy" />
           <span v-else class="bbi-multi-rewrite__noimg">这张还没出图</span>
+          <div v-if="item.context" class="bbi-multi-rewrite__context">
+            <span class="bbi-multi-rewrite__context-label">图前正文</span>
+            <p v-if="item.context.atStart" class="bbi-multi-rewrite__context-p is-muted">这张图在正文开头，前面没有文字。</p>
+            <p v-for="(text, k) in item.context.passages" :key="k" class="bbi-multi-rewrite__context-p">{{ text }}</p>
+          </div>
           <BbiTextarea
             v-model="hints[i]"
             :rows="1"
@@ -144,11 +149,45 @@ onBeforeUnmount(() => {
 
 .bbi-multi-rewrite__img {
   display: block;
-  width: 100%;
-  max-height: 60vh;
+  align-self: center;
+  max-width: 100%;
+  max-height: 34vh;
   border-radius: 4px;
   object-fit: contain;
+}
+
+.bbi-multi-rewrite__context {
+  max-height: 7.5em;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 6px 10px;
+  border-left: 3px solid var(--bbi-accent, oklch(0.75 0.12 70));
+  border-radius: 4px;
   background: color-mix(in srgb, currentColor 6%, transparent);
+  font-size: 12.5px;
+  line-height: 1.6;
+  user-select: text;
+}
+
+.bbi-multi-rewrite__context-label {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.bbi-multi-rewrite__context-p {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.bbi-multi-rewrite__context-p + .bbi-multi-rewrite__context-p {
+  margin-top: 4px;
+}
+
+.bbi-multi-rewrite__context-p.is-muted {
+  opacity: 0.6;
 }
 
 .bbi-multi-rewrite__noimg {

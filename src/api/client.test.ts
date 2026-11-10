@@ -236,6 +236,18 @@ describe('readSseContent:流式', () => {
     ].join('\n');
     await expect(readSseContent(sseResponse(sse))).resolves.toBe('答案!');
   });
+
+  it('开了流式但上游回的是普通 JSON:按非流式取内容', async () => {
+    const body = JSON.stringify({ choices: [{ message: { role: 'assistant', content: '整段答案' } }] });
+    const pieces: string[] = [];
+    await expect(readSseContent(sseResponse(body), piece => pieces.push(piece))).resolves.toBe('整段答案');
+    expect(pieces).toEqual(['整段答案']);
+  });
+
+  it('开了流式但上游回的是 JSON 报错:把报错原话抛出来', async () => {
+    const body = JSON.stringify({ error: { message: 'model not found' } });
+    await expect(readSseContent(sseResponse(body))).rejects.toThrow('model not found');
+  });
 });
 
 describe('validate:历史「成功」= 调用方验收通过', () => {

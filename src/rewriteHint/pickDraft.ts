@@ -17,6 +17,8 @@ export interface PickDraft {
   groups: string[][];
   extra: string;
   savedAt: number;
+  /** 点了「生成」之后才有:当时这一楼正文的指纹(textMark)。见 draftStale */
+  sent?: string;
 }
 
 type Drafts = Record<string, PickDraft>;
@@ -47,6 +49,21 @@ function isDraft(value: unknown): value is PickDraft {
     Array.isArray(draft.groups) &&
     draft.groups.every(group => Array.isArray(group) && group.every(text => typeof text === 'string'))
   );
+}
+
+/** 正文指纹:长度 + 一个简单的哈希,只用来判断「正文变没变」。 */
+export function textMark(text: string): string {
+  let hash = 5381;
+  for (let i = 0; i < text.length; i++) hash = ((hash << 5) + hash + text.charCodeAt(i)) | 0;
+  return `${text.length}:${hash >>> 0}`;
+}
+
+/**
+ * 点了「生成」的存档先不删、记下当时的正文指纹:AI 还没写完手机就把页面杀了,回来还能接着发。
+ * 正文变了(tag 写进去了)说明那次已经写成,这份存档就过期了。
+ */
+export function draftStale(draft: PickDraft | undefined, text: string): boolean {
+  return !!draft && draft.sent !== undefined && draft.sent !== textMark(text);
 }
 
 /** 段落编号 → 原文,存起来用。 */
