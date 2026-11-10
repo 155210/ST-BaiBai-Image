@@ -6,11 +6,11 @@ import ModalMask from '@/components/ModalMask.vue';
 
 import type { SlotItem } from './floorMultiRewrite';
 import { MAX_REWRITE_HINT } from './hint';
-import type { SlotEdit } from './multiRewrite';
+import { combineSlotEdits, type SlotEdit } from './multiRewrite';
 
 /**
  * 「一起改这层的图」弹窗(floorMultiRewrite.ts 命令式挂载,纪律同 PromptEditor:状态走 props/emit)。
- * 每张一个输入框,写了要求的才改,留空的不动。
+ * 每张一张大图 + 一个输入框,写了要求的才改,留空的不动;底下「每张都要改」写了就每张都改。
  */
 const props = defineProps<{
   floor: number;
@@ -27,8 +27,9 @@ const emit = defineEmits<{
 
 const open = ref(false);
 const hints = ref<string[]>(props.items.map(() => ''));
+const common = ref('');
 const noNl = ref<boolean[]>(props.items.map(item => item.noNl));
-const filled = computed(() => props.items.map((item, i) => ({ seq: item.seq, hint: hints.value[i] ?? '' })).filter(e => e.hint.trim()));
+const filled = computed(() => combineSlotEdits(props.items.map((item, i) => ({ seq: item.seq, hint: hints.value[i] ?? '' })), common.value));
 
 watch(
   () => props.closing,
@@ -60,16 +61,12 @@ onBeforeUnmount(() => {
       <header class="bbi-modal-head">
         <span class="bbi-modal-title">一起改这层的图（第 {{ floor }} 楼）</span>
       </header>
-      <p class="bbi-multi-rewrite__tip">给要改的那几张写修改要求，留空的不动。几张一起只问一次 AI，改完一起重新出图，旧图留在卡片历史里。</p>
+      <p class="bbi-multi-rewrite__tip">给要改的那几张写修改要求，留空的不动；每张都要改的写在最下面。几张一起只问一次 AI，改完一起重新出图，旧图留在卡片历史里。</p>
       <ul class="bbi-multi-rewrite__list">
         <li v-for="(item, i) in items" :key="item.seq" class="bbi-multi-rewrite__item">
-          <div class="bbi-multi-rewrite__head">
-            <img v-if="item.src" :src="item.src" alt="" loading="lazy" />
-            <div class="bbi-multi-rewrite__meta">
-              <span class="bbi-multi-rewrite__no">第 {{ item.seq + 1 }} 张</span>
-              <span class="bbi-multi-rewrite__prompt">{{ item.prompt || '（没有提示词）' }}</span>
-            </div>
-          </div>
+          <span class="bbi-multi-rewrite__no">第 {{ item.seq + 1 }} 张</span>
+          <img v-if="item.src" class="bbi-multi-rewrite__img" :src="item.src" :alt="`第 ${item.seq + 1} 张`" loading="lazy" />
+          <span v-else class="bbi-multi-rewrite__noimg">这张还没出图</span>
           <BbiTextarea
             v-model="hints[i]"
             :rows="1"
@@ -83,6 +80,17 @@ onBeforeUnmount(() => {
           </label>
         </li>
       </ul>
+      <label class="bbi-multi-rewrite__common">
+        <span class="bbi-modal-label">每张都要改的（可留空）</span>
+        <BbiTextarea
+          v-model="common"
+          :rows="1"
+          :max-rows="3"
+          :maxlength="MAX_REWRITE_HINT"
+          enterkeyhint="done"
+          placeholder="写了就每张都改，比如：都换成夜晚、加上下雨"
+        />
+      </label>
       <footer class="bbi-modal-foot">
         <span class="bbi-multi-rewrite__spacer"></span>
         <button class="bbi-btn" type="button" @click="emit('close')">取消</button>
@@ -134,25 +142,20 @@ onBeforeUnmount(() => {
   border-radius: 6px;
 }
 
-.bbi-multi-rewrite__head {
-  display: flex;
-  gap: 8px;
-  min-width: 0;
-}
-
-.bbi-multi-rewrite__head img {
-  flex: 0 0 auto;
-  width: 48px;
-  height: 64px;
+.bbi-multi-rewrite__img {
+  display: block;
+  width: 100%;
+  max-height: 60vh;
   border-radius: 4px;
-  object-fit: cover;
+  object-fit: contain;
+  background: color-mix(in srgb, currentColor 6%, transparent);
 }
 
-.bbi-multi-rewrite__meta {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
+.bbi-multi-rewrite__noimg {
+  padding: 16px 0;
+  font-size: 12.5px;
+  text-align: center;
+  opacity: 0.6;
 }
 
 .bbi-multi-rewrite__no {
@@ -160,16 +163,11 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 
-.bbi-multi-rewrite__prompt {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  font-size: 12px;
-  opacity: 0.75;
-  white-space: pre-wrap;
-  word-break: break-word;
+.bbi-multi-rewrite__common {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .bbi-multi-rewrite__spacer {

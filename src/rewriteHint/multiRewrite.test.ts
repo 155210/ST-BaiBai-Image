@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { manySlotTaskNote, normalizeSlotEdits, replaceManySlots, slotSeqs } from './multiRewrite';
+import { combineSlotEdits, manySlotTaskNote, normalizeSlotEdits, replaceManySlots, slotSeqs } from './multiRewrite';
 
 const T = (s: string) => `<bbi_image>${s}<size>portrait</size></bbi_image>`;
 const text = ['第一段', T('a'), '第二段', T('b'), '第三段', T('c')].join('\n');
@@ -35,5 +35,21 @@ describe('一起改几张', () => {
   it('slotSeqs:单张就是自己那张', () => {
     expect(slotSeqs({ seq: 3 })).toEqual([3]);
     expect(slotSeqs({ seq: 0, many: [{ seq: 0, hint: 'a' }, { seq: 4, hint: 'b' }] })).toEqual([0, 4]);
+  });
+
+  it('共同要求:写了就每张都改,和单张要求拼在一起', () => {
+    const items = [{ seq: 0, hint: '全身' }, { seq: 1, hint: '' }, { seq: 2, hint: ' ' }];
+    expect(combineSlotEdits(items, '')).toEqual([{ seq: 0, hint: '全身' }]);
+    expect(combineSlotEdits(items, ' 下雨 ')).toEqual([
+      { seq: 0, hint: '全身\n另外（每张都要）：下雨' },
+      { seq: 1, hint: '下雨' },
+      { seq: 2, hint: '下雨' },
+    ]);
+  });
+
+  it('单张 + 共同要求拼起来不会被截成只剩单张那段', () => {
+    const own = 'a'.repeat(500);
+    const [edit] = normalizeSlotEdits(combineSlotEdits([{ seq: 0, hint: own }], '下雨'));
+    expect(edit.hint.endsWith('下雨')).toBe(true);
   });
 });
