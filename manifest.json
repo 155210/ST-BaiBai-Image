@@ -6,7 +6,7 @@
   "js": "dist/index.js?ver=0.3.2.60",
   "author": "柏柏",
   "version": "0.3.2.60",
-  "homePage": "https://gitlab.com/1151032/st-baibai-image",
+  "homePage": "https://github.com/155210/ST-BaiBai-Image",
   "auto_update": false,
   "minimum_client_version": "1.12.13"
 }

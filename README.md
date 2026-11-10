@@ -58,12 +58,10 @@
 在 SillyTavern 的「扩展 → 安装扩展」里填入本仓库地址即可：
 
 ```
-https://gitlab.com/1151032/st-baibai-image
+https://github.com/155210/ST-BaiBai-Image
 ```
 
 > 本仓库是 [baibai-git/ST-BaiBai-Image](https://github.com/baibai-git/ST-BaiBai-Image) 的维护分支。设置页的「检查更新」看的是本仓库；从原仓库装的用户点更新只会拉到原仓库的版本。
->
-> 原来从 `github.com/155210/ST-BaiBai-Image` 装的插件已经无法更新：请在扩展管理里删掉旧插件，再用上面的 GitLab 地址重装一次，设置和数据都保存在酒馆里，不会丢。
 
 版本号沿用原作者的前三位，第四位是本分支的修订号（例如 `0.3.2.1` 基于原作者 `0.3.2`）。
 
