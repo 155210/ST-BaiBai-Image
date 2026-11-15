@@ -2,6 +2,8 @@
 import { computed, ref } from 'vue';
 import { openMultiRewriteFor } from '@/rewriteHint/floorMultiRewrite';
 import { openPassageGenFor } from '@/rewriteHint/floorPassageGen';
+import { getContext } from '@/st/context';
+import { stepFloor } from './step';
 import { floorInfo, imagesAfterTag, isTagRunning, runFloorTag } from './tag';
 
 /** fork:批量页「单楼操作」——填楼号,直接做楼层 🎧 里的三件事,不用在聊天里翻到那一楼。 */
@@ -38,6 +40,23 @@ function remember(): void {
   }
 }
 
+/** 上一楼 / 下一楼:跳到隔壁能操作的剧情楼,不用再手填楼号。 */
+function canStep(dir: 1 | -1): boolean {
+  void props.chatTick;
+  return stepTarget(dir) !== null;
+}
+function stepTarget(dir: 1 | -1): number | null {
+  const count = getContext()?.chat?.length ?? 0;
+  return stepFloor(count, floor.value, dir, f => floorInfo(f).ok);
+}
+function step(dir: 1 | -1): void {
+  const next = stepTarget(dir);
+  if (next === null) return;
+  text.value = String(next);
+  remember();
+  tick.value++;
+}
+
 /** 只锁正在写的这一楼;换个楼号就能接着点,几楼可以同时写。 */
 const busy = computed(() => !Number.isNaN(floor.value) && isTagRunning(floor.value));
 
@@ -72,8 +91,10 @@ function multi(): void {
 
 <template>
   <div class="bbi-single-floor">
-    <label class="bbi-num-row">
+    <div class="bbi-num-row">
       <span class="bbi-field-label">楼号</span>
+      <span class="bbi-single-floor__nav">
+      <button class="bbi-btn" type="button" title="上一个剧情楼" :disabled="!canStep(-1)" @click="step(-1)">上一楼</button>
       <input
         v-model="text"
         class="bbi-input bbi-num"
@@ -82,9 +103,12 @@ function multi(): void {
         :max="lastFloor"
         step="1"
         :placeholder="`0–${lastFloor}`"
+        aria-label="楼号"
         @change="tick++"
       />
-    </label>
+      <button class="bbi-btn" type="button" title="下一个剧情楼" :disabled="!canStep(1)" @click="step(1)">下一楼</button>
+      </span>
+    </div>
     <p class="bbi-field-hint">
       <template v-if="!info">填楼号（楼层左边显示的 # 后面那个数），不用在聊天里翻到那一楼。</template>
       <template v-else-if="!info.ok">{{ info.reason }}</template>
@@ -104,6 +128,17 @@ function multi(): void {
 </template>
 
 <style scoped>
+.bbi-single-floor__nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bbi-single-floor__nav .bbi-btn {
+  flex: 0 0 auto;
+  padding-inline: 10px;
+}
+
 .bbi-single-floor__actions {
   display: flex;
   flex-wrap: wrap;
