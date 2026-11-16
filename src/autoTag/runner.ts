@@ -15,6 +15,7 @@ import { focusImageCount, passageTaskNote, regenImageOptions } from '@/rewriteHi
 import { pinFocusPosition, placeSlotTag, slotExtraUpdate } from '@/rewriteHint/move';
 import { addFocusedTags, dropAddedMark, waitFloorIdle } from '@/rewriteHint/move';
 import { commitFocusSources, rememberFocusSources } from '@/rewriteHint/sources';
+import { newCharsOnly, saveNewChars } from '@/newChars/slotNewChars';
 import { manySlotTaskNote, normalizeSlotEdits, replaceManySlots, slotSeqs, type SlotEdit } from '@/rewriteHint/multiRewrite';
 import { withSlotPositions } from '@/rewriteHint/slotPosition';
 import {
@@ -454,7 +455,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
 
     // 单槽重写不落 changes:首次全量分析已为整楼建过档,这里再应用一次只会产生
     // 重复的建档/变更记录;库文本已含本楼增量(见上面 entriesBefore),AI 照抄即可。
-    const planOps = slot || opts.add ? [] : planChangeOps(plan);
+    const planOps = slot || opts.add ? newCharsOnly(planChangeOps(plan), entriesBefore) : planChangeOps(plan); // fork:重写/加图也收库里没有的新角色
     // 锁定角色(全局库)不接受 AI changes:丢弃,不写入楼层、不参与 @替换。
     // 重放侧 applyCharTagOps 也会按锁定名再拦一次(旧消息里可能已存这类 ops)。
     const effectiveOps = lockedNames.size
@@ -601,6 +602,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
           },
     );
     if (result === 'saved') {
+      if (slot || opts.add) await saveNewChars(floor, swipeId ?? 0, floorOps); // fork:新角色记进本楼
       if (slot) {
         toastr.success(`已重写第 ${slotSeqs(slot).map(seq => seq + 1).join('、')} 张的提示词，正在按新提示词出图`, '柏宝绘'); // fork:一起改几张
         return { kind: 'written' };
