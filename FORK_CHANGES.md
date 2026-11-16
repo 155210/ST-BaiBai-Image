@@ -142,7 +142,7 @@
 | src/autoTag/runner.ts | && !opts.add) { | 同上：已有 tag 也放行 | 再加一张 |
 | src/autoTag/runner.ts | opts.add ? stripImageTags(rawSource) | 同上：分析去掉旧 tag 的正文 | 再加一张 |
 | src/autoTag/runner.ts | opts.add ? charTagsBeforeFloor(floor + 1) | 同上：角色库含本楼已建档 | 再加一张 |
-| src/autoTag/runner.ts | opts.add ? [] : planChangeOps(plan); | 同上：不改本楼角色记录 | 再加一张 |
+| src/autoTag/runner.ts | opts.add ? newCharsOnly(planChangeOps(plan), entriesBefore) | 同上：不改本楼已有角色，只收库里没有的新角色 | 再加一张 |
 | src/autoTag/runner.ts | !opts.quiet && !opts.add && | 同上：不给原有图挂出图标记 | 再加一张 |
 | src/autoTag/runner.ts | // fork:加图等本楼正在出的图收尾再插 | 同上：等在出的图收尾 | 再加一张 |
 | src/autoTag/runner.ts | // fork:再加几张 | 同上：新 tag 各插到所选那组段落后 | 再加一张 |
@@ -188,6 +188,8 @@
 | src/pages/backend/panels/NaiPanel.vue | <TagSuggestArea | 同上 | 人物提示词联想 |
 | src/pages/backend/panels/ComfyUIPanel.vue | import TagSuggestArea from '@/tagDict/TagSuggestArea.vue'; | ComfyUI 简易模式固定正面 / 负面带标签联想 | 人物提示词联想 |
 | src/pages/backend/panels/ComfyUIPanel.vue | <TagSuggestArea | 同上 | 人物提示词联想 |
+| src/autoTag/runner.ts | // fork:重写/加图也收库里没有的新角色 | 单张重写、挑段落加图时，AI 新建的库里没有的角色也收下 | 重写补角色 |
+| src/autoTag/runner.ts | // fork:新角色记进本楼 | 同上：写回成功后记进这一楼并刷新角色库 | 重写补角色 |
 
 ## 其他本分支改动（不在原作者文件里，或合并时一定会冲突、手动处理）
 
@@ -211,6 +213,7 @@
 - `src/nlSwitch/`：NAI「生成自然语言」关掉时，出图也不发正文 tag 里已有的自然语言（正文不改）；也能按张勾「出图不发自然语言」（聊天里图片「⋯」的 NL 按钮、图片浏览大图的「⋯ 操作」里、「一起改这层的图」里每张一个勾，perSlot.ts，记在浏览器里）
 - `src/modelArtist/`：每个 NAI 模型记住上次在它下面用的画师串（连同画师串绑定的正/负面词），切模型时自动换上；没记过的模型不动当前画师串；记录存在酒馆设置 bbi_model_artists 里
 - `src/longChat/`：聊天里渲染出上千楼时不卡：楼层按钮对账只看变过的楼（dirty.ts），渲染超过 300 楼时让浏览器跳过屏幕外楼层的排版（render.ts，content-visibility）
+- `src/newChars/`：单张「AI 重写提示词」、一起改几张、挑段落加图时，AI 给库里没有的人新建的角色档照样记进本聊天的角色库（改已有角色的字段仍不收，免得和首次分析重复）
 - `src/floorActions/`：批量页「单楼操作」，填楼号直接生成 / 重新生成 tag、挑段落生图、一起改这层的图，不用在聊天里翻到那一楼；勾了「写完 tag 接着出图」时写完接着出这一楼的图；那一楼没显示在聊天里（没有卡片接手出图）时，挑段落 / 一起改写完也由这里直接出图
 - `src/viewportFit/`：插件主面板和大图（聊天里的和图片浏览里的）按手机实际可见屏幕摆位置和高度，地址栏伸缩后底下不露黑屏、顶上按钮不被状态栏挡
 - `src/naiQuota/`：NAI 官方订阅额度与 Anlas 显示（Anlas 分订阅送的 / 买的，Opus 免费额度剩几 % 约几张、每天回几 % 约几张、几天回满）、每张费用估算、「只用免费额度」开关（批量遇到会直接暂停）、每日出图张数（daily.ts，按模型分开、能选模型和从哪天往前看，存在浏览器里、留 400 天，导出设置时一起带走、导入时合并，可二次确认清空）

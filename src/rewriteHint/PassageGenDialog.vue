@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
 import BbiTextarea from '@/components/BbiTextarea.vue';
+import Icon from '@/components/Icon.vue';
 import ModalMask from '@/components/ModalMask.vue';
 
 import { MAX_REWRITE_HINT } from './hint';
@@ -121,28 +122,22 @@ watch(
   },
 );
 
-function onKeydown(event: KeyboardEvent): void {
-  if (event.key !== 'Escape') return;
-  event.stopPropagation();
-  emit('close');
-}
-
+// 挑段落要点很多下,手一滑点到外面就全没了:只认右上角 X、取消和开始生成,点遮罩、按 Esc 都不关
 onMounted(() => {
-  document.addEventListener('keydown', onKeydown, true);
   requestAnimationFrame(() => {
     open.value = true;
   });
 });
-onBeforeUnmount(() => {
-  document.removeEventListener('keydown', onKeydown, true);
-});
 </script>
 
 <template>
-  <ModalMask :open="open" top-layer @close="emit('close')">
+  <ModalMask :open="open" top-layer>
     <div class="bbi-modal" role="dialog" aria-modal="true" aria-label="挑段落生图">
       <header class="bbi-modal-head">
         <span class="bbi-modal-title">{{ regen ? '重新生成 tag' : existing ? '再加图' : '挑段落生图' }}（第 {{ floor }} 楼）</span>
+        <button class="bbi-icon-btn" type="button" aria-label="关闭" title="关闭" @click="emit('close')">
+          <Icon name="close" />
+        </button>
       </header>
       <template v-if="regen">
         <p class="bbi-passage-gen__tip">会先删掉本楼原来的 tag 再写新的；已生成的图片保留在卡片历史里，不会丢失。</p>
