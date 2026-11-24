@@ -190,6 +190,9 @@
 | src/pages/backend/panels/ComfyUIPanel.vue | <TagSuggestArea | 同上 | 人物提示词联想 |
 | src/autoTag/runner.ts | // fork:重写/加图也收库里没有的新角色 | 单张重写、挑段落加图时，AI 新建的库里没有的角色也收下 | 重写补角色 |
 | src/autoTag/runner.ts | // fork:新角色记进本楼 | 同上：写回成功后记进这一楼并刷新角色库 | 重写补角色 |
+| src/autoTag/runner.ts | import { fixBookSlots, keepBookTags } from '@/bookImages/keep'; | 重新生成 tag 时书内插图不跟着删 | 书内插图 |
+| src/autoTag/runner.ts | opts.replace ? keepBookTags(currentText, text) : text | 同上：写回时把书内插图放回原位 | 书内插图 |
+| src/autoTag/runner.ts | if (opts.replace) await fixBookSlots(getContext(), floor, swipeId ?? 0); | 同上：书内插图的图片记录对上新序号 | 书内插图 |
 
 ## 其他本分支改动（不在原作者文件里，或合并时一定会冲突、手动处理）
 
@@ -199,6 +202,7 @@
 
 ## 本分支自有文件
 
+- `src/bookImages/`：别的插件放进楼层的书内插图（`<bbi_image>插图N</bbi_image>`），重新生成 tag 时留在原位，图片记录的序号跟着改
 - `src/batch/`：批量写 tag、批量出图、图片浏览、角色搜索的逻辑（连续失败几楼暂停在批量页可调，填 0 一直不停，记在浏览器里）
 - `src/pages/batch/`：批量页界面
 - `src/floor/slotGenerate.ts`：单张出图（卡片与批量共用）
