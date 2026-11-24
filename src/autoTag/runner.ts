@@ -41,6 +41,7 @@ import {
   markForAutoGenerate,
 } from '@/floor/autoGenerate';
 import { applyMessageText, type ApplyMessageResult } from '@/st/messageEdit';
+import { fixBookSlots, keepBookTags } from '@/bookImages/keep'; // fork:重新生成时书内插图不跟着删
 import { getContext, isAiStoryMessage, type STMessage } from '@/st/context';
 import {
   hasImageTagTrace,
@@ -577,7 +578,8 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
         if (opts.focus) commitFocusSources(floor, markSwipeId); // fork:段落记录随这次写回存盘
         // replace 路径同样以当前正文为基底剔除旧 tag,不能用旧快照
         const base = opts.replace ? stripImageTags(currentText) : currentText;
-        if (!plan.images.length) return base;
+        const keepBooks = (text: string) => (opts.replace ? keepBookTags(currentText, text) : text); // fork:书内插图放回原位
+        if (!plan.images.length) return keepBooks(base);
         // 请求期间用户/别的插件已经贴过 tag:再注入就是重复,交回 build-failed 走放弃分支
         if (!opts.replace && hasImageTagTrace(currentText)) return null;
         const rebased = rebaseImagePositions(
@@ -588,7 +590,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
         );
         if (!rebased) return null;
         rebaseNote = describeRebase(rebased.report);
-        return injectImageTags(base, rebased.images);
+        return keepBooks(injectImageTags(base, rebased.images));
       },
       chatId,
       swipeId,
@@ -602,6 +604,7 @@ async function runForFloor(floor: number, opts: RunOptions = {}): Promise<TagRun
           },
     );
     if (result === 'saved') {
+      if (opts.replace) await fixBookSlots(getContext(), floor, swipeId ?? 0); // fork:书内插图的图片记录对上新序号
       if (slot || opts.add) await saveNewChars(floor, swipeId ?? 0, floorOps); // fork:新角色记进本楼
       if (slot) {
         toastr.success(`已重写第 ${slotSeqs(slot).map(seq => seq + 1).join('、')} 张的提示词，正在按新提示词出图`, '柏宝绘'); // fork:一起改几张
