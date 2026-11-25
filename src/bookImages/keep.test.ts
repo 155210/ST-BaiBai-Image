@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { promptHash } from '@/floor/storage';
-import { isBookImageTag, keepBookTags, renumberBookSlots } from './keep';
+import { generatedSlotSeqs, isBookImageTag, keepBookTags, renumberBookSlots } from './keep';
 
 const BOOK1 = '<bbi_image>插图1</bbi_image>';
 const BOOK2 = '<bbi_image>插图2</bbi_image>';
@@ -10,6 +10,11 @@ describe('书内插图', () => {
   it('只认「插图N」这种 tag', () => {
     expect(isBookImageTag(BOOK1)).toBe(true);
     expect(isBookImageTag(GEN)).toBe(false);
+  });
+
+  it('一起改这层的图只列生成的图，序号保持原样', () => {
+    expect(generatedSlotSeqs(['a', BOOK1, 'b', GEN, 'c', BOOK2, GEN].join('\n'))).toEqual([1, 3]);
+    expect(generatedSlotSeqs(BOOK1)).toEqual([]);
   });
 
   it('重新生成后书内插图放回原来那一行后面，新 tag 照常', () => {
