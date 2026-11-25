@@ -8,6 +8,11 @@ import { BBI_IMAGE_EXTRA_KEY, promptHash, type BbiImageStore } from '@/floor/sto
 const BOOK_TAG = /^<bbi_image>\s*插图\d+\s*<\/bbi_image>$/i;
 const TAG_TRACE = /<\/?bbi_image\b/i;
 
+/** 本楼柏宝绘自己生成的那几张图的序号（跳过书内插图），「一起改这层的图」只列这些。 */
+export function generatedSlotSeqs(mes: string): number[] {
+  return parseImageTags(mes ?? '').flatMap((tag, seq) => (isBookImageTag(tag) ? [] : [seq]));
+}
+
 export function isBookImageTag(tag: string): boolean {
   return BOOK_TAG.test(String(tag ?? '').trim());
 }

@@ -13,6 +13,7 @@ import MultiRewriteDialog from './MultiRewriteDialog.vue';
 import { setSlotNoNl, slotNoNl } from '@/nlSwitch/perSlot';
 import type { SlotEdit } from './multiRewrite';
 import { textBeforeImage, type ImageContextText } from '@/imageContext/before';
+import { generatedSlotSeqs } from '@/bookImages/keep';
 
 /**
  * 楼层「⋯」里的「一起改这层的图」(本 fork 独有):列出本楼每张图,各写修改要求,
@@ -102,14 +103,15 @@ export function openMultiRewriteFor(floor: number, button?: HTMLElement, onDone?
     return;
   }
   const at = { chatId: getContext()?.getCurrentChatId?.() ?? '', messageId: floor, swipeId: message.swipe_id ?? 0 };
-  const items = parseImageTags(message.mes ?? '').map((_raw, seq) => ({
+  // 书内插图（epub 导入的）不列：改写会换掉它的标记，原图就对不上了
+  const items = generatedSlotSeqs(message.mes ?? '').map(seq => ({
     seq,
     src: slotThumb(floor, seq),
     noNl: slotNoNl({ ...at, seq }),
     context: textBeforeImage(message.mes ?? '', seq, settings.excludes.customStripTags),
   }));
   if (!items.length) {
-    toastr.info('本楼还没有图', '柏宝绘');
+    toastr.info(parseImageTags(message.mes ?? '').length ? '本楼只有书内插图，没有柏宝绘生成的图可改' : '本楼还没有图', '柏宝绘');
     return;
   }
   openDialog(floor, items, (edits, noNl) => {
@@ -148,7 +150,7 @@ function syncButtons(): void {
     if (!extra) continue;
     const floor = Number(mesEl.getAttribute('mesid'));
     const message = Number.isInteger(floor) ? chat[floor] : undefined;
-    const wanted = !excluded && isAiStoryMessage(message) && parseImageTags(message?.mes ?? '').length > 0;
+    const wanted = !excluded && isAiStoryMessage(message) && generatedSlotSeqs(message?.mes ?? '').length > 0;
     const existing = extra.querySelector<HTMLElement>(`.${BUTTON_CLASS}`);
     if (wanted && !existing) extra.appendChild(createButton());
     else if (!wanted && existing && existing.dataset.running !== '1') existing.remove();
