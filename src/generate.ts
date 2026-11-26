@@ -31,6 +31,7 @@ import { acquireNaiSlot } from '@/floor/genQueue';
 import type { GenerationMeta } from '@/generationMeta';
 import { recordDailyGen } from '@/naiQuota/daily';
 import { nlForSend } from '@/nlSwitch/send'; // fork:开关关着不发已有的 nl
+import { keepAwake } from '@/keepAlive/keepAlive'; // fork:后台保活
 import { activeComfyPreset, activeNaiEndpoint, activeOrientationLock, effectiveComfyConn, effectiveNai, settings, type BackendId } from '@/state/settings';
 
 /** 一次生成的输入。与协议层 ImageInsertion 同形,但不含正文位置信息。 */
@@ -188,6 +189,7 @@ export async function generateImage(
   const charactersApplied = characters.length > 0 && status.supportsCharacters;
 
   let release: (() => void) | null = null;
+  const awake = keepAwake(); // fork:后台保活
   try {
     // 持槽:取到槽位后本函数内一直持有,直到 finally 释放
     if (isNai) release = await acquireNaiSlot(signal);
@@ -257,5 +259,6 @@ export async function generateImage(
     return { result, seed: input.seed, size, backend: status.backend, charactersApplied, meta };
   } finally {
     release?.();
+    awake(); // fork:后台保活
   }
 }

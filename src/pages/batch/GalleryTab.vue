@@ -169,6 +169,8 @@ function openImage(slot: GallerySlot, entry: BbiImageEntry): void {
     list: snapshot,
     index: snapshot.indexOf(slot),
     entry,
+    // 大图开着时新出的图也翻得到(列表按现在的筛选和顺序重算)
+    live: () => list.value,
     onShow: index => {
       const target = Math.floor(index / perPage.value);
       if (target !== page.value) {

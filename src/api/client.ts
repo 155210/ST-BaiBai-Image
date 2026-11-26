@@ -1,5 +1,6 @@
 import { getContext } from '@/st/context';
 import type { ApiChannel } from '@/state/settings';
+import { withKeepAwake } from '@/keepAlive/keepAlive'; // fork:后台保活
 import { beginStream } from '@/stream/live';
 import { withIdleTimeout } from '@/stream/idle';
 import {
@@ -159,7 +160,7 @@ export async function requestCompletion(
   messages: ChatMsg[],
   opts: RequestOptions = {},
 ): Promise<string> {
-  return requestCompletionAtUrl(channel, messages, normalizeUrl(channel.url), opts);
+  return withKeepAwake(() => requestCompletionAtUrl(channel, messages, normalizeUrl(channel.url), opts)); // fork:后台保活
 }
 
 /**
@@ -489,6 +490,10 @@ export function mainApiAvailable(): boolean {
  * (如 Kemini 防截断脚本)仍可能改写它。生成 tag 尽量指派副 API 渠道,走 buildRequestBody 那条路。
  */
 export async function requestViaMainApi(messages: ChatMsg[], opts: RequestOptions = {}): Promise<string> {
+  return withKeepAwake(() => requestViaMainApiInner(messages, opts)); // fork:后台保活
+}
+
+async function requestViaMainApiInner(messages: ChatMsg[], opts: RequestOptions): Promise<string> {
   const ctx = getContext();
   if (typeof ctx?.generateRaw !== 'function') {
     throw new ApiError('当前 ST 版本不支持 generateRaw,无法跟随主 API');
