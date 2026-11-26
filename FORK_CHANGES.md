@@ -38,6 +38,13 @@
 | src/App.vue | import { useViewportFit } from '@/viewportFit/fit'; | 插件主面板也贴合手机实际屏幕，底下不露空 | 主面板底下空一截 |
 | src/App.vue | useViewportFit(overlayEl); | 同上 | 主面板底下空一截 |
 | src/App.vue | ref="overlayEl" | 同上：给遮罩挂 ref | 主面板底下空一截 |
+| src/api/client.ts | import { withKeepAwake } from '@/keepAlive/keepAlive'; | 写 tag 的请求期间后台保活 | 后台保活 |
+| src/api/client.ts | return withKeepAwake(() => requestCompletionAtUrl( | 同上：副 API | 后台保活 |
+| src/api/client.ts | return withKeepAwake(() => requestViaMainApiInner( | 同上：跟随主 API | 后台保活 |
+| src/generate.ts | const awake = keepAwake(); | 出图期间后台保活 | 后台保活 |
+| src/generate.ts | awake(); // fork:后台保活 | 同上：出完图放掉 | 后台保活 |
+| src/pages/settings/index.vue | import KeepAlivePanel from '@/keepAlive/KeepAlivePanel.vue'; | 设置页「后台保活」 | 后台保活 |
+| src/pages/settings/index.vue | <KeepAlivePanel /> | 同上 | 后台保活 |
 | src/floor/lightbox.ts | nav: options.nav, | 同上：传给灯箱 | 图片浏览左右切换 |
 | src/floor/lightbox.ts | export function closeLightbox | 切到没图的卡片时关掉灯箱 | 图片浏览左右切换 |
 | src/floor/Lightbox.vue | import ImageContextView from '@/imageContext/ImageContext.vue'; | 大图下面、提示词上面显示这张图前面的几段正文 | 大图对照正文 |
@@ -207,7 +214,7 @@
 - `src/pages/batch/`：批量页界面
 - `src/floor/slotGenerate.ts`：单张出图（卡片与批量共用）
 - `src/state/backup.ts`、`src/pages/settings/BackupSection.vue`：导出 / 导入设置（含每日出图计数）
-- `src/lightboxNav/`、`src/batch/galleryLightbox.ts`、`src/pages/batch/EmptySlotView.vue`：图片浏览大图左右切换
+- `src/lightboxNav/`、`src/batch/galleryLightbox.ts`、`src/pages/batch/EmptySlotView.vue`：图片浏览大图左右切换（大图开着时按图片浏览现在的列表算左右，新出的图也翻得到）
 - `src/charBust/`：角色库「胸部」一栏的旧数据迁移（体型里的胸部词挪过去）
 - `src/charCopy/`：编辑角色里「复制外貌」（tag 各栏和自然语言外貌按「【栏目】内容」复制，带给识图 AI 的说明）和「粘贴回填」（AI 改过格式也认：加粗、冒号、列表、表格、代码块、「原来 → 现在」；没写到的栏不动，写「无」的清空）
 - `src/floorMenu/`：楼层「⋯」里柏宝绘的几个按钮收成一个 🎧，点开竖排菜单（原按钮照常注入，只是藏起来）
@@ -219,6 +226,7 @@
 - `src/longChat/`：聊天里渲染出上千楼时不卡：楼层按钮对账只看变过的楼（dirty.ts），渲染超过 300 楼时让浏览器跳过屏幕外楼层的排版（render.ts，content-visibility）
 - `src/newChars/`：单张「AI 重写提示词」、一起改几张、挑段落加图时，AI 给库里没有的人新建的角色档照样记进本聊天的角色库（改已有角色的字段仍不收，免得和首次分析重复）
 - `src/floorActions/`：批量页「单楼操作」，填楼号直接生成 / 重新生成 tag、挑段落生图、一起改这层的图，不用在聊天里翻到那一楼；勾了「写完 tag 接着出图」时写完接着出这一楼的图；那一楼没显示在聊天里（没有卡片接手出图）时，挑段落 / 一起改写完也由这里直接出图
+- `src/keepAlive/`：写 tag、出图期间放一段听不见的 30Hz 低频声音（Web Audio，不抢音频焦点），再占一把 Web Lock、开一个空的 WebRTC 连接，手机切后台时页面不容易被暂停；最后一个请求结束 90 秒后关；「加强」改成循环播放极小声的音频文件；开关在设置页「后台保活」，存在浏览器里
 - `src/viewportFit/`：插件主面板和大图（聊天里的和图片浏览里的）按手机实际可见屏幕摆位置和高度，地址栏伸缩后底下不露黑屏、顶上按钮不被状态栏挡
 - `src/naiQuota/`：NAI 官方订阅额度与 Anlas 显示（Anlas 分订阅送的 / 买的，Opus 免费额度剩几 % 约几张、每天回几 % 约几张、几天回满）、每张费用估算、「只用免费额度」开关（批量遇到会直接暂停）、每日出图张数（daily.ts，按模型分开、能选模型和从哪天往前看，存在浏览器里、留 400 天，导出设置时一起带走、导入时合并，可二次确认清空）
 - `src/rewriteHint/`：AI 重写提示词时可以写额外要求；「挑正文里的一段」点选本楼段落只画那几段；楼层「⋯」里有「挑一段生图」按钮（可一次挑几组段落、每组一张，只调一次 AI；已有图的楼是「再加图」，新图插到所选段落后、原来的图不动）；楼层「重新生成 tag」可以不指定段落并定最多几张，或指定段落几组几张；按段落出的图会记下是哪几段（消息 extra 的 bbiPassageSources），再加图时标在那几段上；没写成时再打开会带上上次选的段落；选了没生成就自动存着，下次打开接着选，点「清空」才清掉（pickDraft.ts，存在浏览器里、按段落原文找回）；点了「生成」的存档留到 tag 写进正文为止，等 AI 时页面被手机杀掉也能接着发；有图的楼「⋯」里还有「一起改这层的图」，每张写修改要求、一次发给 AI 一起改，每张图下面带「图前正文」；重写提示词时把每张图在正文里的位置一并报给 AI（slotPosition.ts），免得它自己推算

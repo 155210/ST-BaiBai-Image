@@ -47,6 +47,24 @@ export interface GalleryLightboxOptions {
   entry?: BbiImageEntry;
   /** 切换后告诉图片浏览跟到对应的卡片(翻页)。 */
   onShow?: (index: number) => void;
+  /**
+   * 图片浏览现在的列表(按当前筛选和顺序)。给了就每次切换都按它算左右邻居:
+   * 大图开着时新出的图(「最近出图在前」排到前面、「只看有图」新加进来)也翻得到。
+   */
+  live?: () => GallerySlot[];
+}
+
+/** 这张卡片在现在的列表里排第几:找不到(被筛掉了)就还用打开时的那份。 */
+export function locate(
+  list: GallerySlot[],
+  index: number,
+  live?: () => GallerySlot[],
+): { list: GallerySlot[]; index: number } {
+  const slot = list[index];
+  if (!live || !slot) return { list, index };
+  const fresh = live();
+  const at = fresh.findIndex(item => item.floor === slot.floor && item.seq === slot.seq);
+  return at >= 0 ? { list: fresh, index: at } : { list, index };
 }
 
 function promptOf(view: SlotView): string {
@@ -67,7 +85,13 @@ let closeEmpty: (() => void) | null = null;
  * 「还没有图」/「重新生成中」画面。regen = 从大图点了「重新生成」:马上开始出图,
  * 等新图出来(最新一张换了)再切回大图;旧图一直留着,失败了可以回去看旧图。
  */
-function openEmpty(options: GalleryLightboxOptions, view: SlotView, nav: LightboxNav, regen = false): void {
+function openEmpty(
+  options: GalleryLightboxOptions,
+  view: SlotView,
+  nav: LightboxNav,
+  regen = false,
+  syncNav?: () => void,
+): void {
   const root = document.getElementById(HOST_ID)?.shadowRoot;
   const context = getContext();
   if (!root || !context) return;
@@ -85,6 +109,7 @@ function openEmpty(options: GalleryLightboxOptions, view: SlotView, nav: Lightbo
 
   // 生成状态在 genState 里(不是本组件的),定时读一下;图出来了就换成大图
   const refresh = () => {
+    syncNav?.();
     const record = getGenRecord(key);
     state.busy = record?.phase === 'queued' || record?.phase === 'generating';
     state.busyText = busyLabel(record) || '生成中…';
@@ -153,36 +178,51 @@ export function openGalleryLightbox(options: GalleryLightboxOptions): void {
   const context = getContext();
   const chat = context?.chat;
   if (!chat) return;
+  // 先对一下现在的列表:中间新出了图,顺序和张数可能变了
+  ({ list: options.list, index: options.index } = locate(options.list, options.index, options.live));
   const { list, index } = options;
   const slot = list[index];
   if (!slot) return;
   const view = readSlot(chat, slot);
   if (!view) return;
 
-  const { prev, next } = neighbours(list.length, index);
-  const go = (target: number) => () => {
+  // 左右切换按点下去那一刻的列表算:大图开着时新出的图也翻得到
+  const go = (step: number) => () => {
+    const now = locate(list, index, options.live);
+    const target = now.index + step;
+    if (target < 0 || target >= now.list.length) return;
     options.onShow?.(target);
-    openGalleryLightbox({ list, index: target, onShow: options.onShow });
+    openGalleryLightbox({ list: now.list, index: target, onShow: options.onShow, live: options.live });
   };
-  const nav: LightboxNav = {
-    prev: prev === undefined ? undefined : go(prev),
-    next: next === undefined ? undefined : go(next),
-    label: `#${view.floor}${view.seq ? ` 第${view.seq + 1}张` : ''} · ${index + 1} / ${list.length}`,
+  const goPrev = go(-1);
+  const goNext = go(1);
+  const nav: LightboxNav = reactive({});
+  const plainNav: LightboxNav = reactive({});
+  /** 箭头和「第几张 / 共几张」跟着现在的列表走(大图开着时每 800ms 对一次) */
+  const syncNav = () => {
+    const now = locate(list, index, options.live);
+    const { prev, next } = neighbours(now.list.length, now.index);
+    const label = `#${view.floor}${view.seq ? ` 第${view.seq + 1}张` : ''} · ${now.index + 1} / ${now.list.length}`;
+    for (const target of [nav, plainNav]) {
+      target.prev = prev === undefined ? undefined : goPrev;
+      target.next = next === undefined ? undefined : goNext;
+      target.label = label;
+    }
   };
+  syncNav();
 
   const entry = options.entry ?? slotImage(view);
   if (!entry) {
     closeLightbox();
-    openEmpty(options, view, nav);
+    openEmpty(options, view, nav, false, syncNav);
     return;
   }
   closeEmpty?.();
-  // 「重新生成中」画面只带切卡片的箭头和标题,别把 roll 箭头、删除、状态轮询带过去
-  const plainNav: LightboxNav = { prev: nav.prev, next: nav.next, label: nav.label };
+  // 「重新生成中」画面只带切卡片的箭头和标题(plainNav),别把 roll 箭头、删除、状态轮询带过去
   // 大图上的「重新生成」:和卡片上的 ↻ 同一条路,出完自动换成新图
   nav.regenerate = () => {
     closeLightbox();
-    openEmpty(options, view, plainNav, true);
+    openEmpty(options, view, plainNav, true, syncNav);
   };
   // 大图上的「编辑」:和卡片上的 ✎ 同一个弹窗;「应用并重绘」回到大图看进度,出完换新图
   nav.edit = () => {
@@ -219,7 +259,7 @@ export function openGalleryLightbox(options: GalleryLightboxOptions): void {
           if (!deleted) return;
           const fresh = readSlot(getContext()?.chat ?? [], slot);
           const left = fresh?.history ?? [];
-          openGalleryLightbox({ list, index, onShow: options.onShow, entry: left[Math.min(at, left.length - 1)] });
+          openGalleryLightbox({ list, index, onShow: options.onShow, live: options.live, entry: left[Math.min(at, left.length - 1)] });
         });
       },
     },
@@ -244,12 +284,13 @@ export function openGalleryLightbox(options: GalleryLightboxOptions): void {
   const before = slotImage(view)?.generationId ?? '';
   let waiting = false;
   nav.poll = () => {
+    syncNav();
     // 编辑框 / 删除确认开着时先不动,免得新开的大图盖住它
     if (modalOpen()) return null;
     // 提示词被改了(大图上点了编辑并应用):编辑框关掉后换成新提示词的样子
     const now = readSlot(getContext()?.chat ?? [], slot);
     if (now && now.tag !== view.tag) {
-      openGalleryLightbox({ list, index, onShow: options.onShow });
+      openGalleryLightbox({ list, index, onShow: options.onShow, live: options.live });
       return null;
     }
     if (isTagPlanning(key)) {
@@ -265,7 +306,7 @@ export function openGalleryLightbox(options: GalleryLightboxOptions): void {
       waiting = false;
       const now = slotImage(readSlot(getContext()?.chat ?? [], slot));
       if (now && now.generationId !== before) {
-        openGalleryLightbox({ list, index, onShow: options.onShow });
+        openGalleryLightbox({ list, index, onShow: options.onShow, live: options.live });
         return null;
       }
     }

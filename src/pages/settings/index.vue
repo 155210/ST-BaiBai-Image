@@ -7,6 +7,7 @@ import Icon from '@/components/Icon.vue';
 import ModalMask from '@/components/ModalMask.vue';
 import HeavyPresetPanel from '@/pages/settings/HeavyPresetPanel.vue';
 import TagDictPanel from '@/tagDict/TagDictPanel.vue'; // fork:标签库
+import KeepAlivePanel from '@/keepAlive/KeepAlivePanel.vue'; // fork:后台保活
 import { fetchModels, testChannel } from '@/api/client';
 import {
   BACKENDS,
@@ -875,6 +876,10 @@ async function confirmUpdate() {
 
       <Collapsible title="标签库" :open="false">
         <TagDictPanel />
+      </Collapsible>
+
+      <Collapsible title="后台保活" :open="false">
+        <KeepAlivePanel />
       </Collapsible>
 
       <BackupSection />
